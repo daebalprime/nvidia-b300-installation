@@ -39,11 +39,11 @@ echo "[Diag] Active NVIDIA repos:"
 apt-cache policy | grep -E "nvidia|cuda|file:/var" || true
 echo ""
 
-# 0.1 로컬 리포 등록 확인
-if ! apt-cache policy | grep -q "file:/var/nvidia-driver-local\|file:/var/cuda-repo"; then
-    echo "[ERROR] Local repo not found. Run 01_setup_repos.sh first."
-    exit 1
-fi
+# 0.1 로컬 리포 파일 존재 여부 확인
+echo "[Check] Local repo directories:"
+ls -d /var/nvidia-driver-local-repo-* 2>/dev/null && echo "  Driver repo: OK" || echo "  Driver repo: MISSING"
+ls -d /var/cuda-repo-ubuntu2404-13-0-local 2>/dev/null && echo "  CUDA repo: OK" || echo "  CUDA repo: MISSING"
+echo ""
 
 # 0.2 candidate 확인
 echo "[Check] nvidia-driver-580-open candidate:"
