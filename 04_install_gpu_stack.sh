@@ -3,49 +3,60 @@
 # 04_install_gpu_stack.sh
 # [로컬 .deb 방식] NVIDIA GPU 스택 설치 — 580.126.20 통일
 #
-# 전제: 01_setup_repos.sh에서 로컬 리포 등록 + NVLink .deb 다운로드 완료
+# 전제: 01_setup_repos.sh에서 로컬 리포 등록 완료
+# 로컬 리포 경로:
+#   /var/nvidia-driver-local-repo-ubuntu2404-580.126.20/
+#   /var/cuda-repo-ubuntu2404-13-0-local/
 ###############################################################################
 set -euo pipefail
 
-DL_DIR="/tmp/nvidia-debs"
+DRIVER_VERSION="580.126.20"
 
 echo "=============================================="
-echo " GPU Stack Installation (Local Repo / 580.126.20)"
+echo " GPU Stack Installation (Local Repo / ${DRIVER_VERSION})"
 echo "=============================================="
 
-# 0. 로컬 리포 등록 확인
+# 0. 네트워크 리포 제거 (cuda-keyring이 다시 등록했을 수 있음)
+echo "[Step 0] Blocking NVIDIA network repo (159.04 prevention)..."
+sudo rm -f /etc/apt/sources.list.d/cuda-ubuntu2404-x86_64.list
+# cuda-keyring이 만든 소스를 비활성화
+if [ -f /etc/apt/sources.list.d/cuda-ubuntu2404-x86_64.list ]; then
+    sudo rm -f /etc/apt/sources.list.d/cuda-ubuntu2404-x86_64.list
+fi
+# 혹시 다른 이름으로 등록됐을 수 있음
+for f in /etc/apt/sources.list.d/*cuda*network* /etc/apt/sources.list.d/*cuda*x86_64*; do
+    [ -f "$f" ] && sudo rm -f "$f"
+done
+sudo apt-get update
+
+# 0.1 로컬 리포 등록 확인
 if ! apt-cache policy | grep -q "nvidia-driver-local\|cuda.*local"; then
     echo "[ERROR] Local repo not found. Run 01_setup_repos.sh first."
     exit 1
 fi
 
-# 1. 드라이버 설치 (로컬 리포에서 — Open Kernel)
-echo "[Step 1] Installing NVIDIA Driver (Open / 580.126.20)..."
+# 0.2 candidate 확인
+echo "[Check] nvidia-driver-580-open candidate:"
+apt-cache policy nvidia-driver-580-open | head -5
+echo "[Check] nvlink5-580 candidate:"
+apt-cache policy nvlink5-580 | head -5
+
+# 1. 드라이버 설치 (로컬 리포 — Open Kernel / Blackwell 필수)
+echo ""
+echo "[Step 1] Installing NVIDIA Driver (Open / ${DRIVER_VERSION})..."
 sudo apt-get install -y \
     nvidia-driver-580-open \
     nvidia-dkms-580-open \
     nvidia-utils-580
 
-# 2. NVLink5 스택 설치
+# 2. NVLink5 스택 (로컬 리포에서 — FM + IMEX + NSCQ 일괄)
 echo "[Step 2] Installing NVLink5 stack..."
-
-# 로컬 리포에 nvlink5-580이 있으면 apt로, 없으면 직접 dpkg -i
-if apt-cache show nvlink5-580 2>/dev/null | grep -q "580.126.20"; then
-    echo "  Installing via apt (local repo)..."
-    sudo apt-get install -y nvlink5-580
-else
-    echo "  Installing via dpkg (downloaded .deb files)..."
-    # 개별 패키지 직접 설치
-    sudo dpkg -i \
-        "$DL_DIR/nvidia-fabricmanager_580.126.20-1_amd64.deb" \
-        "$DL_DIR/nvidia-imex_580.126.20-1_amd64.deb" \
-        "$DL_DIR/libnvidia-nscq_580.126.20-1_amd64.deb" \
-        "$DL_DIR/libnvsdm_580.126.20-1_amd64.deb" \
-        "$DL_DIR/nvlink5-580_580.126.20-1_amd64.deb" \
-        "$DL_DIR/nvlink5_580.126.20-1_amd64.deb" \
-        2>/dev/null || true
-    sudo apt-get install -f -y  # 의존성 해결
-fi
+sudo apt-get install -y \
+    nvlink5-580 \
+    nvidia-fabricmanager \
+    nvidia-imex \
+    libnvidia-nscq \
+    libnvsdm
 
 sudo systemctl enable --now nvidia-fabricmanager
 sudo systemctl enable --now nvidia-imex
@@ -70,7 +81,7 @@ dpkg -l | grep -E "nvidia-driver|fabricmanager|imex|nscq|nvlink5" | awk '{printf
 if dpkg -l | grep nvidia | grep -qE "159\.|595\."; then
     echo -e "\n\e[31m [WARNING] Version contamination detected!\e[0m"
 else
-    echo -e "\n\e[32m [OK] Clean 580.126.20 stack.\e[0m"
+    echo -e "\n\e[32m [OK] Clean ${DRIVER_VERSION} stack.\e[0m"
 fi
 
 echo ""
