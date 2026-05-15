@@ -41,10 +41,26 @@ sudo apt-get install -y freeipmi-tools ipmitool
 echo "[Step 3] Preparing directories..."
 sudo mkdir -p ${MONITORING_DIR}/{prometheus-data,config}
 
-if [ -d "${MONITORING_SRC}" ]; then
-    sudo cp -r ${MONITORING_SRC}/* ${MONITORING_DIR}/config/ 2>/dev/null || true
-    # docker-compose 파일은 실행을 위해 상위로 복사
-    sudo cp ${MONITORING_SRC}/docker-compose*.yml ${MONITORING_DIR}/ 2>/dev/null || true
+# 파일 찾기 (여러 후보 경로 탐색)
+SEARCH_PATHS=("${SCRIPT_DIR}" "${SCRIPT_DIR}/.." "${SCRIPT_DIR}/../monitoring" "${SCRIPT_DIR}/monitoring")
+FOUND_SRC=""
+
+for P in "${SEARCH_PATHS[@]}"; do
+    if [ -f "${P}/docker-compose.node2.yml" ]; then
+        FOUND_SRC="${P}"
+        break
+    fi
+done
+
+if [ -n "${FOUND_SRC}" ]; then
+    echo "  Found monitoring files in ${FOUND_SRC}"
+    # 설정 파일들 복사
+    [ -d "${FOUND_SRC}/config" ] && sudo cp -r "${FOUND_SRC}/config"/* "${MONITORING_DIR}/config/" 2>/dev/null || true
+    # docker-compose 파일들 복사
+    sudo cp "${FOUND_SRC}"/docker-compose*.yml "${MONITORING_DIR}/"
+else
+    echo "  [ERROR] Cannot find docker-compose.node2.yml in search paths."
+    exit 1
 fi
 
 # 4. Docker Compose 실행
