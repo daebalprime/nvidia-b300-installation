@@ -16,21 +16,31 @@ echo "=============================================="
 echo " GPU Stack Installation (Local Repo / ${DRIVER_VERSION})"
 echo "=============================================="
 
-# 0. 네트워크 리포 제거 (cuda-keyring이 다시 등록했을 수 있음)
+# 0. 네트워크 리포 강제 제거 (cuda-keyring이 다시 등록했을 수 있음)
 echo "[Step 0] Blocking NVIDIA network repo (159.04 prevention)..."
-sudo rm -f /etc/apt/sources.list.d/cuda-ubuntu2404-x86_64.list
-# cuda-keyring이 만든 소스를 비활성화
-if [ -f /etc/apt/sources.list.d/cuda-ubuntu2404-x86_64.list ]; then
-    sudo rm -f /etc/apt/sources.list.d/cuda-ubuntu2404-x86_64.list
-fi
-# 혹시 다른 이름으로 등록됐을 수 있음
-for f in /etc/apt/sources.list.d/*cuda*network* /etc/apt/sources.list.d/*cuda*x86_64*; do
-    [ -f "$f" ] && sudo rm -f "$f"
+# cuda-keyring이 등록하는 모든 네트워크 소스 제거
+for f in /etc/apt/sources.list.d/cuda*.list; do
+    if [ -f "$f" ] && grep -q "developer.download.nvidia.com" "$f" 2>/dev/null; then
+        echo "  Removing network repo: $f"
+        sudo rm -f "$f"
+    fi
+done
+# /etc/apt/sources.list.d/ 하위에 cuda-keyring이 만든 .sources 파일도 제거
+for f in /etc/apt/sources.list.d/cuda*.sources; do
+    if [ -f "$f" ] && grep -q "developer.download.nvidia.com" "$f" 2>/dev/null; then
+        echo "  Removing network source: $f"
+        sudo rm -f "$f"
+    fi
 done
 sudo apt-get update
 
+# 진단: 현재 등록된 NVIDIA 관련 리포 출력
+echo "[Diag] Active NVIDIA repos:"
+apt-cache policy | grep -E "nvidia|cuda|file:/var" || true
+echo ""
+
 # 0.1 로컬 리포 등록 확인
-if ! apt-cache policy | grep -q "nvidia-driver-local\|cuda.*local"; then
+if ! apt-cache policy | grep -q "file:/var/nvidia-driver-local\|file:/var/cuda-repo"; then
     echo "[ERROR] Local repo not found. Run 01_setup_repos.sh first."
     exit 1
 fi
