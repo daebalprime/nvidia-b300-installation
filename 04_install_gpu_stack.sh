@@ -23,6 +23,8 @@ sudo apt-get install -y \
     nvidia-imex \
     nvlink5 \
     nvlsm \
+    libnccl2 \
+    libnccl-dev \
     datacenter-gpu-manager-4-core \
     datacenter-gpu-manager-4-multinode-cuda13
 

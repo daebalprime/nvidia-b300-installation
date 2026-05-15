@@ -10,7 +10,7 @@ BINARY="${HOME}/nccl-workspace/nccl-tests/build/all_reduce_perf"
 
 # 1. 경로 설정
 export CUDA_HOME=/usr/local/cuda
-export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH:-}
+export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}
 
 echo "==============================================================================="
 echo " Blackwell HGX B300 NCCL Optimization (Intra-Node)"
