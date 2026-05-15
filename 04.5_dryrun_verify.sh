@@ -1,10 +1,13 @@
 #!/bin/bash
 ###############################################################################
 # 04.5_dryrun_verify.sh
-# [사전 검증] 리포지토리에서 580 브랜치 패키지들의 버전 일치 여부를 확인
+# [사전 검증] Origin Pinning 적용 후 버전 일치 여부 확인
 #
-# 하드코딩된 버전이 아니라, 리포지토리에서 실제로 사용 가능한 580 버전을
-# 자동 탐지한 뒤 모든 핵심 패키지가 그 버전으로 통일 가능한지 검증합니다.
+# 이 스크립트는:
+#   1. NVIDIA CUDA repo를 최우선 출처로 고정하는 APT Pin을 적용
+#   2. 적용 후 각 패키지의 candidate 버전을 조회
+#   3. 모든 패키지가 동일한 580.x.yy 버전인지 검증
+#   4. dry-run으로 의존성 충돌 여부 시뮬레이션
 ###############################################################################
 set -u
 
@@ -12,8 +15,38 @@ echo "=============================================="
 echo " Pre-flight Version Verification (Dry-run)"
 echo "=============================================="
 
-# 580 브랜치 패키지 목록
-# 핵심: "-580" 접미사가 붙은 패키지명을 사용해야 595 브랜치 오염을 방지
+###############################################################################
+# Step 0: Origin Pinning 적용 (04_install_gpu_stack.sh와 동일)
+###############################################################################
+echo "[Step 0] Applying NVIDIA origin pin..."
+
+cat <<'EOF' | sudo tee /etc/apt/preferences.d/nvidia-origin-lock > /dev/null
+Package: *nvidia* *cuda* *libnvidia* *fabricmanager* *imex* *nscq* *nvlsm* *nvsdm*
+Pin: origin "developer.download.nvidia.com"
+Pin-Priority: 1001
+
+Package: *nvidia* *libnvidia* *fabricmanager* *imex* *nscq*
+Pin: release o=Ubuntu,n=noble-updates
+Pin-Priority: 100
+
+Package: *nvidia*
+Pin: version 595.*
+Pin-Priority: -1
+
+Package: *nvidia*
+Pin: version 535.*
+Pin-Priority: -1
+EOF
+
+sudo apt-get update -qq
+
+###############################################################################
+# Step 1: Pinning 적용 후 candidate 버전 조회
+###############################################################################
+echo ""
+echo "[Step 1] Checking candidate versions after origin pinning..."
+echo ""
+
 PACKAGES=(
     "nvidia-driver-580-open"
     "nvidia-dkms-580-open"
@@ -25,34 +58,25 @@ PACKAGES=(
 )
 
 FAILED=0
-
-###############################################################################
-# Step 1: 리포지토리에서 각 패키지의 사용 가능한 580 버전 조회
-###############################################################################
-echo ""
-echo "[Step 1] Querying available 580.x versions from repository..."
-echo ""
-
 declare -A PKG_VERSIONS
 
 for PKG in "${PACKAGES[@]}"; do
-    # madison 결과에서 580.x 버전만 추출
-    AVAIL=$(apt-cache madison "$PKG" 2>/dev/null | awk '{print $3}' | grep "^580\." | head -n 1)
+    # apt-cache policy는 Pin을 반영한 candidate를 보여줌
+    CANDIDATE=$(apt-cache policy "$PKG" 2>/dev/null | grep "Candidate:" | awk '{print $2}')
+    SOURCE=$(apt-cache policy "$PKG" 2>/dev/null | grep -A1 "\\*\\*\\*\\|${CANDIDATE}" | grep "http" | awk '{print $2}' | head -1)
     
-    if [ -z "$AVAIL" ]; then
-        printf "  %-30s : \e[31m[NO 580.x VERSION FOUND]\e[0m\n" "$PKG"
-        # 혹시 접미사 없는 버전이 있는지도 확인
-        AVAIL_ANY=$(apt-cache madison "$PKG" 2>/dev/null | head -n 3)
-        if [ -n "$AVAIL_ANY" ]; then
-            echo "    → Available versions:"
-            echo "$AVAIL_ANY" | sed 's/^/      /'
-        else
-            echo "    → Package not found in any repository"
-        fi
+    if [ -z "$CANDIDATE" ] || [ "$CANDIDATE" = "(none)" ]; then
+        printf "  %-30s : \e[31m[NOT AVAILABLE]\e[0m\n" "$PKG"
         FAILED=1
     else
-        PKG_VERSIONS[$PKG]="$AVAIL"
-        printf "  %-30s : \e[32m%s\e[0m\n" "$PKG" "$AVAIL"
+        PKG_VERSIONS[$PKG]="$CANDIDATE"
+        # 580인지 확인
+        if echo "$CANDIDATE" | grep -q "^580\."; then
+            printf "  %-30s : \e[32m%-30s\e[0m  ← %s\n" "$PKG" "$CANDIDATE" "$SOURCE"
+        else
+            printf "  %-30s : \e[31m%-30s (NOT 580!)\e[0m\n" "$PKG" "$CANDIDATE"
+            FAILED=1
+        fi
     fi
 done
 
@@ -60,20 +84,18 @@ done
 # Step 2: 버전 일치 여부 확인
 ###############################################################################
 echo ""
-echo "[Step 2] Checking version consistency across all packages..."
+echo "[Step 2] Checking version consistency..."
 
 if [ $FAILED -eq 1 ]; then
-    echo -e "  \e[33m[SKIP] Some packages missing, cannot check consistency.\e[0m"
+    echo -e "  \e[33m[SKIP] Some packages missing or wrong branch.\e[0m"
 else
-    # 모든 패키지의 버전에서 앞 3자리(580.xxx.yy)만 추출하여 비교
     UNIQUE_VERSIONS=$(for V in "${PKG_VERSIONS[@]}"; do echo "$V" | grep -oP '580\.\d+\.\d+'; done | sort -u)
     NUM_UNIQUE=$(echo "$UNIQUE_VERSIONS" | wc -l)
     
     if [ "$NUM_UNIQUE" -eq 1 ]; then
-        echo -e "  \e[32m[PASS] All packages share version: $UNIQUE_VERSIONS\e[0m"
+        echo -e "  \e[32m[PASS] All packages unified at: $UNIQUE_VERSIONS\e[0m"
     else
-        echo -e "  \e[31m[FAIL] Version mismatch detected!\e[0m"
-        echo "  Found these different versions:"
+        echo -e "  \e[31m[FAIL] Version mismatch!\e[0m"
         for PKG in "${!PKG_VERSIONS[@]}"; do
             printf "    %-30s → %s\n" "$PKG" "${PKG_VERSIONS[$PKG]}"
         done
@@ -82,28 +104,26 @@ else
 fi
 
 ###############################################################################
-# Step 3: Dry-run 시뮬레이션 (실제 설치 없이 의존성 충돌 검사)
+# Step 3: Dry-run 시뮬레이션
 ###############################################################################
 echo ""
 echo "[Step 3] Simulating installation (apt-get install -s)..."
 
 if [ $FAILED -eq 0 ]; then
-    # 탐지된 버전으로 시뮬레이션
-    INSTALL_CMD="sudo apt-get install -s"
+    INSTALL_ARGS=""
     for PKG in "${!PKG_VERSIONS[@]}"; do
-        INSTALL_CMD+=" ${PKG}=${PKG_VERSIONS[$PKG]}"
+        INSTALL_ARGS+=" ${PKG}=${PKG_VERSIONS[$PKG]}"
     done
     
-    if eval "$INSTALL_CMD" > /dev/null 2>&1; then
-        echo -e "  \e[32m[PASS] No dependency conflicts. Safe to install.\e[0m"
+    if sudo apt-get install -s $INSTALL_ARGS > /dev/null 2>&1; then
+        echo -e "  \e[32m[PASS] No dependency conflicts.\e[0m"
     else
-        echo -e "  \e[31m[FAIL] Dependency conflict detected!\e[0m"
-        echo "  Running again with verbose output:"
-        eval "$INSTALL_CMD" 2>&1 | tail -20
+        echo -e "  \e[31m[FAIL] Dependency conflict!\e[0m"
+        sudo apt-get install -s $INSTALL_ARGS 2>&1 | grep -E "^E:|Depends:|Conflicts:" | head -10
         FAILED=1
     fi
 else
-    echo -e "  \e[33m[SKIP] Cannot simulate due to previous failures.\e[0m"
+    echo -e "  \e[33m[SKIP]\e[0m"
 fi
 
 ###############################################################################
@@ -112,14 +132,11 @@ fi
 echo ""
 echo "=============================================="
 if [ $FAILED -eq 0 ]; then
-    echo -e "\e[32m ✓ SAFE TO PROCEED\e[0m"
-    echo ""
-    echo " Detected install command:"
-    for PKG in "${!PKG_VERSIONS[@]}"; do
-        echo "   ${PKG}=${PKG_VERSIONS[$PKG]}"
-    done
+    echo -e "\e[32m ✓ SAFE TO PROCEED with 04_install_gpu_stack.sh\e[0m"
 else
     echo -e "\e[31m ✗ DO NOT PROCEED - Fix issues above first\e[0m"
+    echo ""
+    echo " Hint: run 'apt-cache policy <package>' to check which repo provides what"
 fi
 echo "=============================================="
 

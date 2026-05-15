@@ -19,14 +19,23 @@ echo "=============================================="
 ###############################################################################
 echo "[Step 0] Setting APT pin to block non-580 packages..."
 
-# 595, 535 등 다른 브랜치가 끼어드는 것을 시스템 레벨에서 차단
-cat <<'EOF' | sudo tee /etc/apt/preferences.d/nvidia-branch-lock
-# 580 브랜치 패키지에 최고 우선순위 부여
-Package: *nvidia*580* *cuda-13-0* *cuda-toolkit-13-0*
-Pin: version 580.*
+# 문제: NVIDIA CUDA repo(580.159.04)와 Ubuntu noble-updates(580.126.20)가
+#       같은 580 브랜치인데 서로 다른 패치 버전을 제공함
+# 해결: NVIDIA CUDA repo 출처를 최우선으로 고정하여 한 세트만 사용
+cat <<'EOF' | sudo tee /etc/apt/preferences.d/nvidia-origin-lock
+# NVIDIA 공식 CUDA 리포지토리를 최고 우선순위로 설정
+# → 모든 nvidia 패키지를 이 출처에서 가져옴 (580.159.04 세트)
+Package: *nvidia* *cuda* *libnvidia* *fabricmanager* *imex* *nscq* *nvlsm* *nvsdm*
+Pin: origin "developer.download.nvidia.com"
 Pin-Priority: 1001
 
-# 그 외 nvidia 패키지는 설치 금지
+# Ubuntu noble-updates의 nvidia 패키지는 후순위로 밀어냄
+# → NVIDIA repo에 없는 패키지만 여기서 가져옴
+Package: *nvidia* *libnvidia* *fabricmanager* *imex* *nscq*
+Pin: release o=Ubuntu,n=noble-updates
+Pin-Priority: 100
+
+# 595, 535 등 다른 브랜치는 완전 차단
 Package: *nvidia*
 Pin: version 595.*
 Pin-Priority: -1
