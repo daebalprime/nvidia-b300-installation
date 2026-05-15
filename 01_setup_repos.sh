@@ -1,7 +1,7 @@
 #!/bin/bash
 ###############################################################################
 # 01_setup_repos.sh
-# [온라인 환경용] NVIDIA 로컬 리포지토리 .deb 다운로드 + 등록
+# [온라인 환경용] NVIDIA 로컬 리포지토리 구축 + APT Pinning 고정
 ###############################################################################
 set -euo pipefail
 
@@ -12,23 +12,25 @@ DCGM_VERSION="4.5.3-1"
 
 DL_DIR="/tmp/nvidia-debs"
 EXTRA_REPO="/opt/nvidia-pkgs"
+PIN_FILE="/etc/apt/preferences.d/nvidia-pinning"
 
 echo "=============================================="
-echo " Repository Setup (Clean & Precise)"
+echo " Repository Setup & Version Pinning"
 echo "=============================================="
 
-# 0. 디렉토리 정리 및 초기화
-echo "[Step 0] Initializing directory..."
+# 0. 디렉토리 정리 및 APT 에러 방지 처리
+echo "[Step 0] Initializing directory and preventing APT errors..."
 sudo mkdir -p "$DL_DIR" "$EXTRA_REPO"
-# 찌꺼기 제거 후, apt update 에러 방지를 위해 빈 인덱스 즉시 생성
+# 기존 리포지토리 리스트가 있다면 잠시 주석 처리하거나 무시하게 함 (Packages 파일 부재 에러 방지)
+[ -f /etc/apt/sources.list.d/nvidia-extra-local.list ] && sudo mv /etc/apt/sources.list.d/nvidia-extra-local.list /etc/apt/sources.list.d/nvidia-extra-local.list.bak || true
+
+# 찌꺼기 제거 및 빈 인덱스 생성
 sudo rm -rf "${EXTRA_REPO}"/*
-touch "${EXTRA_REPO}/Packages"
-gzip -c "${EXTRA_REPO}/Packages" > "${EXTRA_REPO}/Packages.gz"
+sudo touch "${EXTRA_REPO}/Packages"
+sudo gzip -c "${EXTRA_REPO}/Packages" | sudo tee "${EXTRA_REPO}/Packages.gz" > /dev/null
 
 # 1. 필수 도구 설치
 echo "[Step 1] Installing prerequisites..."
-# 로컬 리포 에러를 무시하고 넘어가기 위해 --allow-releaseinfo-change 등 사용 가능하나,
-# 여기서는 단순히 update 실패를 무시하고 필요한 도구만 설치 시도
 sudo apt-get update || true
 sudo apt-get install -y gnupg2 curl ca-certificates wget dpkg-dev
 
@@ -66,7 +68,9 @@ EXTRA_PKGS=(
     "nvlink5-580_${DRIVER_VERSION}-1_amd64.deb"
     "nvlink5_${DRIVER_VERSION}-1_amd64.deb"
     "datacenter-gpu-manager-4-core_${DCGM_VERSION}_amd64.deb"
+    "datacenter-gpu-manager-4-service_${DCGM_VERSION}_amd64.deb"
     "datacenter-gpu-manager-4-cuda13_${DCGM_VERSION}_amd64.deb"
+    "datacenter-gpu-manager-4-multinode_${DCGM_VERSION}_amd64.deb"
     "datacenter-gpu-manager-4-multinode-cuda13_${DCGM_VERSION}_amd64.deb"
 )
 
@@ -82,8 +86,8 @@ done
 
 echo "  → Generating real package index..."
 cd "${EXTRA_REPO}"
-dpkg-scanpackages . /dev/null > Packages
-gzip -9c Packages > Packages.gz
+dpkg-scanpackages . /dev/null | sudo tee Packages > /dev/null
+sudo gzip -9c Packages | sudo tee Packages.gz > /dev/null
 
 # 5. 모든 NVIDIA 네트워크 소스 제거
 echo "[Step 5] Blocking network sources..."
@@ -94,13 +98,26 @@ for f in /etc/apt/sources.list.d/cuda*.list /etc/apt/sources.list.d/cuda*.source
     fi
 done
 
-# 6. Layer 3 APT 소스 등록 (이미 있으면 덮어씀)
+# 6. Layer 3 APT 소스 등록
 echo "[Step 6] Registering Layer 3 local repo..."
 echo "deb [trusted=yes] file:${EXTRA_REPO} /" | sudo tee /etc/apt/sources.list.d/nvidia-extra-local.list > /dev/null
+sudo rm -f /etc/apt/sources.list.d/nvidia-extra-local.list.bak
 
-# 7. 로컬 소스 강제 신뢰 설정
-sudo sed -i 's/deb file/deb [trusted=yes] file/g' /etc/apt/sources.list.d/cuda*.list 2>/dev/null || true
-sudo sed -i 's/deb file/deb [trusted=yes] file/g' /etc/apt/sources.list.d/nvidia*.list 2>/dev/null || true
+# 7. APT Pinning 설정 (버전 강제 고정)
+echo "[Step 7] Applying APT Pinning to lock versions..."
+sudo tee "$PIN_FILE" > /dev/null <<EOF
+Package: *
+Pin: origin ""
+Pin-Priority: 1001
+
+Package: nvidia-* libnvidia-*
+Pin: version 580.126.20*
+Pin-Priority: 1001
+
+Package: datacenter-gpu-manager*
+Pin: version ${DCGM_VERSION}*
+Pin-Priority: 1001
+EOF
 
 # 8. DOCA 리포지토리
 echo "[Step 8] Adding DOCA repository..."
@@ -109,10 +126,10 @@ wget -qO - --no-check-certificate https://linux.mellanox.com/public/repo/doca/3.
 echo "deb [signed-by=/usr/share/keyrings/mellanox.gpg] https://linux.mellanox.com/public/repo/doca/3.2.1/ubuntu24.04/x86_64/ /" | \
     sudo tee /etc/apt/sources.list.d/doca.list
 
-# 9. 최종 APT 캐시 업데이트 (여기서 모든 로컬 패키지가 인식됨)
+# 9. 최종 APT 캐시 업데이트
 echo "[Step 9] Final APT update..."
 sudo apt-get update
 
 echo "=============================================="
-echo " Setup complete! DCGM 4.5.3-1 and 580.126.20 ready."
+echo " Setup complete with Version Pinning!"
 echo "=============================================="
