@@ -16,11 +16,13 @@ sudo apt-get install -y linux-headers-$(uname -r)
 sudo apt-get install -y nvidia-driver-580-open
 
 # 2. CUDA 및 Blackwell 도구 설치
-# Pinning 패키지가 이미 580.126.20을 강제하므로 아래 명령어로 모든 의존성이 해결됩니다.
-echo "[Step 2] Installing CUDA & Blackwell stack..."
-sudo apt-get install -y cuda-toolkit-13-0 \
+# Step 2: Blackwell 전용 스택 (Pinning이 580.126.20 강제함)
+echo "[Step 2] Installing Blackwell-specific tools..."
+sudo apt-get install -y \
     nvidia-fabricmanager \
     nvidia-imex \
+    nvlink5 \
+    nvlsm \
     datacenter-gpu-manager-4-core \
     datacenter-gpu-manager-4-multinode-cuda13
 
