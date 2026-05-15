@@ -11,7 +11,7 @@ set -euo pipefail
 PARAMS="MODULE_SPLIT_M0[0..3]=1 MODULE_SPLIT_M0[4..15]=FF NUM_OF_PLANES_P1=0 LINK_TYPE_P1=1 NUM_OF_PF=1"
 
 echo "=============================================="
-echo " ConnectX-8 (CX8) Configuration Tool (Safe Mode)"
+echo " ConnectX-8 (CX8) Configuration Tool (Precision Mode)"
 echo "=============================================="
 
 sudo mst start 2>/dev/null || true
@@ -26,15 +26,18 @@ DEVICES=$(ls /sys/class/infiniband/ 2>/dev/null || echo "")
 for dev in $DEVICES; do
     printf "  Checking %-10s : " "$dev"
     
-    # Device 이름 추출 (예: Device: ConnectX8)
-    DEVICE_INFO=$(sudo mlxconfig -d "$dev" q 2>/dev/null | grep "Device:" | head -n 1 || true)
+    # mlxconfig 쿼리 전체 결과를 읽어옴
+    FULL_QUERY=$(sudo mlxconfig -d "$dev" q 2>/dev/null || true)
     
-    # 정밀 필터링: ConnectX8 또는 ConnectX-8이 포함되어야 하며, ConnectX-6 등은 제외
-    if echo "$DEVICE_INFO" | grep -Ei "ConnectX-?8" | grep -qvE "ConnectX-?[0-79]"; then
-        echo "[CX8 Detected: $DEVICE_INFO] Applying Blackwell optimization..."
+    # 1. "ConnectX-8" 또는 "ConnectX8" 키워드 존재 여부 확인
+    # 2. 다른 세대(ConnectX-6 등)의 오탐지 방지
+    if echo "$FULL_QUERY" | grep -Ei "ConnectX-?8" | grep -qvE "ConnectX-?[0-79]"; then
+        # 상세 모델명 정보 추출 (Description 필드 선호)
+        MODEL_INFO=$(echo "$FULL_QUERY" | grep -Ei "Description|Part Number" | head -n 1 | cut -d: -f2- | xargs || echo "ConnectX-8")
+        echo "[CX8 Detected: $MODEL_INFO] Applying Blackwell optimization..."
         sudo mlxconfig -d "$dev" -y set $PARAMS
     else
-        echo "[Skipped] Not a CX8 Device ($DEVICE_INFO)"
+        echo "[Skipped] Not a CX8 Device"
     fi
 done
 
