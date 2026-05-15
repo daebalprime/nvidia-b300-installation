@@ -2,24 +2,21 @@
 ###############################################################################
 # 01_setup_repos.sh
 # [온라인 환경용] NVIDIA 로컬 리포지토리 .deb 다운로드 + 등록
-#
-# 오프라인과 동일한 3-Layer 구조 재현:
-#   Layer 1: nvidia-driver-local-repo .deb -> dpkg -i -> 자동 소스 등록
-#   Layer 2: cuda-repo-local .deb -> dpkg -i -> 자동 소스 등록
-#   Layer 3: 개별 .deb 다운로드 -> /opt/nvidia-pkgs/ -> Packages.gz 인덱싱
 ###############################################################################
 set -euo pipefail
 
 DRIVER_VERSION="580.126.20"
 CUDA_VERSION="13.0.2"
 CUDA_DRIVER_VERSION="580.95.05"
+DCGM_VERSION="4.5.3-1"
 
 DL_DIR="/tmp/nvidia-debs"
 EXTRA_REPO="/opt/nvidia-pkgs"
 mkdir -p "$DL_DIR" "$EXTRA_REPO"
 
 echo "=============================================="
-echo " Repository Setup (Optimized 3-Layer)"
+echo " Repository Setup (Blackwell Optimized)"
+echo " DCGM Version: ${DCGM_VERSION}"
 echo "=============================================="
 
 # 1. 필수 도구
@@ -32,10 +29,8 @@ DRIVER_DEB="${DL_DIR}/nvidia-driver-local-repo-ubuntu2404-${DRIVER_VERSION}_1.0-
 DRIVER_URL="https://developer.download.nvidia.com/compute/nvidia-driver/${DRIVER_VERSION}/local_installers/nvidia-driver-local-repo-ubuntu2404-${DRIVER_VERSION}_1.0-1_amd64.deb"
 
 echo "[Step 2] Layer 1: GPU Driver Local Repo..."
-if [ -s "$DRIVER_DEB" ]; then
-    echo "  → [SKIP] Already exists: $(basename $DRIVER_DEB)"
-else
-    wget -c -O "$DRIVER_DEB" "$DRIVER_URL"
+if [ ! -s "$DRIVER_DEB" ]; then
+    wget -c -O "$DRIVER_DEB" "$DRIVER_URL" || { rm -f "$DRIVER_DEB"; exit 1; }
 fi
 sudo dpkg -i "$DRIVER_DEB"
 sudo cp /var/nvidia-driver-local-repo-ubuntu2404-*/nvidia-driver-local-*-keyring.gpg /usr/share/keyrings/ 2>/dev/null || true
@@ -45,16 +40,14 @@ CUDA_DEB="${DL_DIR}/cuda-repo-ubuntu2404-13-0-local_${CUDA_VERSION}-${CUDA_DRIVE
 CUDA_URL="https://developer.download.nvidia.com/compute/cuda/${CUDA_VERSION}/local_installers/cuda-repo-ubuntu2404-13-0-local_${CUDA_VERSION}-${CUDA_DRIVER_VERSION}-1_amd64.deb"
 
 echo "[Step 3] Layer 2: CUDA Local Repo..."
-if [ -s "$CUDA_DEB" ]; then
-    echo "  → [SKIP] Already exists: $(basename $CUDA_DEB)"
-else
-    wget -c -O "$CUDA_DEB" "$CUDA_URL"
+if [ ! -s "$CUDA_DEB" ]; then
+    wget -c -O "$CUDA_DEB" "$CUDA_URL" || { rm -f "$CUDA_DEB"; exit 1; }
 fi
 sudo dpkg -i "$CUDA_DEB"
 sudo cp /var/cuda-repo-ubuntu2404-13-0-local/cuda-*-keyring.gpg /usr/share/keyrings/ 2>/dev/null || true
 
-# 4. Layer 3: 개별 패키지 다운로드
-echo "[Step 4] Layer 3: Downloading extra NVLink packages..."
+# 4. Layer 3: 개별 패키지 다운로드 (NVLink5 + DCGM 4.5.3-1)
+echo "[Step 4] Layer 3: Downloading extra Blackwell packages..."
 NVIDIA_REPO="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64"
 EXTRA_PKGS=(
     "nvidia-fabricmanager_${DRIVER_VERSION}-1_amd64.deb"
@@ -62,10 +55,14 @@ EXTRA_PKGS=(
     "nvidia-imex_${DRIVER_VERSION}-1_amd64.deb"
     "libnvidia-nscq_${DRIVER_VERSION}-1_amd64.deb"
     "libnvsdm_${DRIVER_VERSION}-1_amd64.deb"
-    "libnvsdm-dev_${DRIVER_VERSION}-1_amd64.deb"
     "nvlink5-580_${DRIVER_VERSION}-1_amd64.deb"
     "nvlink5_${DRIVER_VERSION}-1_amd64.deb"
-    "datacenter-gpu-manager_3.3.10_amd64.deb"
+    # DCGM 4.5.3-1 Blackwell 지원 최신 패키지
+    "datacenter-gpu-manager_${DCGM_VERSION}_amd64.deb"
+    "datacenter-gpu-manager-4-core_${DCGM_VERSION}_amd64.deb"
+    "datacenter-gpu-manager-4-service_${DCGM_VERSION}_amd64.deb"
+    "datacenter-gpu-manager-4-cuda13_${DCGM_VERSION}_amd64.deb"
+    "datacenter-gpu-manager-4-multinode-cuda13_${DCGM_VERSION}_amd64.deb"
 )
 
 for PKG in "${EXTRA_PKGS[@]}"; do
@@ -74,7 +71,10 @@ for PKG in "${EXTRA_PKGS[@]}"; do
         echo "  → [SKIP] Already exists: ${PKG}"
     else
         echo "  → Downloading ${PKG}..."
-        wget -c -q -O "$TARGET" "${NVIDIA_REPO}/${PKG}" || echo "  [WARN] Failed: ${PKG}"
+        if ! wget -c -q -O "$TARGET" "${NVIDIA_REPO}/${PKG}"; then
+            echo "  [WARN] Failed: ${PKG}"
+            rm -f "$TARGET"
+        fi
     fi
 done
 
@@ -96,7 +96,7 @@ done
 echo "[Step 6] Registering Layer 3 local repo..."
 echo "deb [trusted=yes] file:${EXTRA_REPO} /" | sudo tee /etc/apt/sources.list.d/nvidia-extra-local.list > /dev/null
 
-# 7. 로컬 소스 강제 신뢰 설정 (GPG Bypass)
+# 7. 로컬 소스 강제 신뢰 설정
 sudo sed -i 's/deb file/deb [trusted=yes] file/g' /etc/apt/sources.list.d/cuda*.list 2>/dev/null || true
 sudo sed -i 's/deb file/deb [trusted=yes] file/g' /etc/apt/sources.list.d/nvidia*.list 2>/dev/null || true
 
@@ -111,5 +111,5 @@ echo "deb [signed-by=/usr/share/keyrings/mellanox.gpg] https://linux.mellanox.co
 sudo apt-get update
 
 echo "=============================================="
-echo " Setup complete! Files in $DL_DIR are preserved."
+echo " Setup complete! DCGM ${DCGM_VERSION} registered."
 echo "=============================================="

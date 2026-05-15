@@ -50,8 +50,10 @@ sudo systemctl enable --now nvidia-imex
 echo "[Step 3] Installing CUDA Toolkit..."
 sudo apt-get install -y cuda-toolkit-13-0
 
+# Step 4: auxiliary packages (DCGM, NCCL, GDS)
 echo "[Step 4] Installing auxiliary packages..."
 sudo apt-get install -y datacenter-gpu-manager || true
+sudo systemctl enable --now nvidia-dcgm || true
 sudo apt-get install -y libnccl2 libnccl-dev || true
 sudo apt-get install -y nvidia-gds-13-0 || true
 
