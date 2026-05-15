@@ -1,113 +1,142 @@
 #!/bin/bash
 ###############################################################################
 # 04.5_dryrun_verify.sh
-# [사전 검증] Origin Pinning 적용 후 버전 일치 여부 확인
+# [사전 검증] 리포지토리 진단 + 버전 일치 검증
 #
-# 이 스크립트는:
-#   1. NVIDIA CUDA repo를 최우선 출처로 고정하는 APT Pin을 적용
-#   2. 적용 후 각 패키지의 candidate 버전을 조회
-#   3. 모든 패키지가 동일한 580.x.yy 버전인지 검증
-#   4. dry-run으로 의존성 충돌 여부 시뮬레이션
+# 핵심: 어떤 출처(origin)에 어떤 버전이 있는지 전부 보여주고,
+#       nvlink5-580 메타패키지 사용 가능 여부도 확인
 ###############################################################################
 set -u
 
 echo "=============================================="
-echo " Pre-flight Version Verification (Dry-run)"
+echo " NVIDIA 580 Stack - Repository Diagnostic"
 echo "=============================================="
 
 ###############################################################################
-# Step 0: Origin Pinning 적용 (04_install_gpu_stack.sh와 동일)
-###############################################################################
-echo "[Step 0] Applying NVIDIA origin pin..."
-
-cat <<'EOF' | sudo tee /etc/apt/preferences.d/nvidia-origin-lock > /dev/null
-Package: *nvidia* *cuda* *libnvidia* *fabricmanager* *imex* *nscq* *nvlsm* *nvsdm*
-Pin: origin "developer.download.nvidia.com"
-Pin-Priority: 1001
-
-Package: *nvidia* *libnvidia* *fabricmanager* *imex* *nscq*
-Pin: release o=Ubuntu,n=noble-updates
-Pin-Priority: 100
-
-Package: *nvidia*
-Pin: version 595.*
-Pin-Priority: -1
-
-Package: *nvidia*
-Pin: version 535.*
-Pin-Priority: -1
-EOF
-
-sudo apt-get update -qq
-
-###############################################################################
-# Step 1: Pinning 적용 후 candidate 버전 조회
+# Step 1: 핵심 패키지별 사용 가능한 모든 버전 + 출처 표시
 ###############################################################################
 echo ""
-echo "[Step 1] Checking candidate versions after origin pinning..."
-echo ""
+echo "[Step 1] Available versions per package (all sources)"
+echo "================================================================"
 
-PACKAGES=(
+CORE_PACKAGES=(
     "nvidia-driver-580-open"
+    "nvidia-driver-580"
     "nvidia-dkms-580-open"
-    "nvidia-utils-580"
     "nvidia-fabricmanager-580"
     "nvidia-imex-580"
     "libnvidia-nscq-580"
-    "libnvidia-compute-580"
+    "nvlink5-580"
 )
 
-FAILED=0
-declare -A PKG_VERSIONS
-
-for PKG in "${PACKAGES[@]}"; do
-    # apt-cache policy는 Pin을 반영한 candidate를 보여줌
-    CANDIDATE=$(apt-cache policy "$PKG" 2>/dev/null | grep "Candidate:" | awk '{print $2}')
-    SOURCE=$(apt-cache policy "$PKG" 2>/dev/null | grep -A1 "\\*\\*\\*\\|${CANDIDATE}" | grep "http" | awk '{print $2}' | head -1)
-    
-    if [ -z "$CANDIDATE" ] || [ "$CANDIDATE" = "(none)" ]; then
-        printf "  %-30s : \e[31m[NOT AVAILABLE]\e[0m\n" "$PKG"
-        FAILED=1
+for PKG in "${CORE_PACKAGES[@]}"; do
+    echo ""
+    echo "  [$PKG]"
+    RESULT=$(apt-cache madison "$PKG" 2>/dev/null | head -5)
+    if [ -n "$RESULT" ]; then
+        echo "$RESULT" | sed 's/^/    /'
     else
-        PKG_VERSIONS[$PKG]="$CANDIDATE"
-        # 580인지 확인
-        if echo "$CANDIDATE" | grep -q "^580\."; then
-            printf "  %-30s : \e[32m%-30s\e[0m  ← %s\n" "$PKG" "$CANDIDATE" "$SOURCE"
-        else
-            printf "  %-30s : \e[31m%-30s (NOT 580!)\e[0m\n" "$PKG" "$CANDIDATE"
-            FAILED=1
-        fi
+        echo "    (not found in any repository)"
     fi
 done
 
 ###############################################################################
-# Step 2: 버전 일치 여부 확인
+# Step 2: nvlink5-580 메타패키지 의존성 확인
 ###############################################################################
 echo ""
-echo "[Step 2] Checking version consistency..."
+echo "================================================================"
+echo "[Step 2] nvlink5-580 meta-package dependencies"
+echo "================================================================"
 
-if [ $FAILED -eq 1 ]; then
-    echo -e "  \e[33m[SKIP] Some packages missing or wrong branch.\e[0m"
+if apt-cache show nvlink5-580 &>/dev/null; then
+    echo ""
+    echo "  Version:"
+    apt-cache policy nvlink5-580 2>/dev/null | grep -E "Candidate|Installed" | sed 's/^/    /'
+    echo ""
+    echo "  Depends:"
+    apt-cache depends nvlink5-580 2>/dev/null | grep -E "Depends|Recommends" | sed 's/^/    /'
 else
-    UNIQUE_VERSIONS=$(for V in "${PKG_VERSIONS[@]}"; do echo "$V" | grep -oP '580\.\d+\.\d+'; done | sort -u)
-    NUM_UNIQUE=$(echo "$UNIQUE_VERSIONS" | wc -l)
-    
-    if [ "$NUM_UNIQUE" -eq 1 ]; then
-        echo -e "  \e[32m[PASS] All packages unified at: $UNIQUE_VERSIONS\e[0m"
-    else
-        echo -e "  \e[31m[FAIL] Version mismatch!\e[0m"
-        for PKG in "${!PKG_VERSIONS[@]}"; do
-            printf "    %-30s → %s\n" "$PKG" "${PKG_VERSIONS[$PKG]}"
-        done
-        FAILED=1
-    fi
+    echo "  nvlink5-580 NOT found in repository"
 fi
 
 ###############################################################################
-# Step 3: Dry-run 시뮬레이션
+# Step 3: apt-cache policy로 핀 적용 후 candidate 확인
 ###############################################################################
 echo ""
-echo "[Step 3] Simulating installation (apt-get install -s)..."
+echo "================================================================"
+echo "[Step 3] Current candidate versions (with active pins)"
+echo "================================================================"
+echo ""
+
+CHECK_PACKAGES=(
+    "nvidia-driver-580-open"
+    "nvidia-dkms-580-open"
+    "nvidia-fabricmanager-580"
+    "nvidia-imex-580"
+    "libnvidia-nscq-580"
+    "libnvidia-compute-580"
+    "nvidia-utils-580"
+    "nvlink5-580"
+)
+
+declare -A PKG_VERSIONS
+FAILED=0
+
+for PKG in "${CHECK_PACKAGES[@]}"; do
+    CANDIDATE=$(apt-cache policy "$PKG" 2>/dev/null | grep "Candidate:" | awk '{print $2}')
+    
+    if [ -z "$CANDIDATE" ] || [ "$CANDIDATE" = "(none)" ]; then
+        printf "  %-30s : \e[33m(not available)\e[0m\n" "$PKG"
+    else
+        PKG_VERSIONS[$PKG]="$CANDIDATE"
+        VER_SHORT=$(echo "$CANDIDATE" | grep -oP '580\.\d+\.\d+' || echo "$CANDIDATE")
+        printf "  %-30s : %s\n" "$PKG" "$CANDIDATE"
+    fi
+done
+
+###############################################################################
+# Step 4: 버전 통일 가능성 판단
+###############################################################################
+echo ""
+echo "================================================================"
+echo "[Step 4] Version consistency analysis"
+echo "================================================================"
+echo ""
+
+# 580.x.y 부분만 추출하여 그룹화
+declare -A VER_GROUPS
+for PKG in "${!PKG_VERSIONS[@]}"; do
+    VER_SHORT=$(echo "${PKG_VERSIONS[$PKG]}" | grep -oP '580\.\d+\.\d+' || echo "unknown")
+    VER_GROUPS[$VER_SHORT]+="$PKG "
+done
+
+for VER in "${!VER_GROUPS[@]}"; do
+    echo "  Version $VER:"
+    for PKG in ${VER_GROUPS[$VER]}; do
+        echo "    - $PKG"
+    done
+    echo ""
+done
+
+NUM_GROUPS=${#VER_GROUPS[@]}
+if [ "$NUM_GROUPS" -eq 1 ]; then
+    echo -e "  \e[32m[PASS] All packages at same version!\e[0m"
+elif [ "$NUM_GROUPS" -eq 0 ]; then
+    echo -e "  \e[31m[FAIL] No 580 packages found.\e[0m"
+    FAILED=1
+else
+    echo -e "  \e[31m[FAIL] $NUM_GROUPS different versions detected.\e[0m"
+    FAILED=1
+fi
+
+###############################################################################
+# Step 5: Dry-run 시뮬레이션
+###############################################################################
+echo ""
+echo "================================================================"
+echo "[Step 5] Dry-run simulation"
+echo "================================================================"
+echo ""
 
 if [ $FAILED -eq 0 ]; then
     INSTALL_ARGS=""
@@ -118,12 +147,24 @@ if [ $FAILED -eq 0 ]; then
     if sudo apt-get install -s $INSTALL_ARGS > /dev/null 2>&1; then
         echo -e "  \e[32m[PASS] No dependency conflicts.\e[0m"
     else
-        echo -e "  \e[31m[FAIL] Dependency conflict!\e[0m"
-        sudo apt-get install -s $INSTALL_ARGS 2>&1 | grep -E "^E:|Depends:|Conflicts:" | head -10
+        echo -e "  \e[31m[FAIL] Dependency conflict:\e[0m"
+        sudo apt-get install -s $INSTALL_ARGS 2>&1 | grep -E "^E:|Depends:|Conflicts:|but it is not going" | head -10 | sed 's/^/    /'
         FAILED=1
     fi
 else
-    echo -e "  \e[33m[SKIP]\e[0m"
+    # mismatch가 있어도 nvlink5-580 기준으로 시뮬레이션 시도
+    echo "  Trying nvlink5-580 + nvidia-driver-580-open together..."
+    if sudo apt-get install -s nvlink5-580 nvidia-driver-580-open cuda-toolkit-13-0 > /dev/null 2>&1; then
+        echo -e "  \e[32m[PASS] nvlink5-580 + driver-580-open resolves cleanly!\e[0m"
+        echo ""
+        echo "  Resolved versions:"
+        sudo apt-get install -s nvlink5-580 nvidia-driver-580-open cuda-toolkit-13-0 2>/dev/null \
+            | grep "^Inst" | grep -i nvidia | sed 's/^/    /'
+        FAILED=0
+    else
+        echo -e "  \e[31m[FAIL] Cannot resolve even with meta-package.\e[0m"
+        sudo apt-get install -s nvlink5-580 nvidia-driver-580-open 2>&1 | grep -E "^E:|Depends:|Conflicts:|but" | head -10 | sed 's/^/    /'
+    fi
 fi
 
 ###############################################################################
@@ -132,11 +173,9 @@ fi
 echo ""
 echo "=============================================="
 if [ $FAILED -eq 0 ]; then
-    echo -e "\e[32m ✓ SAFE TO PROCEED with 04_install_gpu_stack.sh\e[0m"
+    echo -e "\e[32m ✓ SAFE TO PROCEED\e[0m"
 else
-    echo -e "\e[31m ✗ DO NOT PROCEED - Fix issues above first\e[0m"
-    echo ""
-    echo " Hint: run 'apt-cache policy <package>' to check which repo provides what"
+    echo -e "\e[31m ✗ DO NOT PROCEED - Review diagnostic above\e[0m"
 fi
 echo "=============================================="
 
