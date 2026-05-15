@@ -1,155 +1,70 @@
 #!/bin/bash
 ###############################################################################
 # 04_install_gpu_stack.sh
-# [온라인 환경용] NVIDIA GPU 스택 설치 (버전 자동 탐지 + 브랜치 격리)
+# [온라인] NVIDIA GPU 스택 설치 — 580.126.20 통일
 #
-# 핵심 전략:
-#   1. APT Pinning으로 595 등 다른 브랜치를 완전 차단
-#   2. 패키지명에 "-580" 접미사를 명시하여 브랜치 격리
-#   3. 리포지토리에서 실제 사용 가능한 580.x 버전을 자동 탐지
+# 전략:
+#   nvlink5-580=580.126.20-2 메타패키지로 NVLink 스택 전체를 한 세트로 설치
+#   nvidia-driver-580-open=580.126.20-1ubuntu1 으로 드라이버 버전 고정
 ###############################################################################
 set -euo pipefail
 
+# 버전 고정 (진단 결과 기준)
+DRV_V="580.126.20-1ubuntu1"
+NVL_V="580.126.20-2"
+
 echo "=============================================="
-echo " GPU Stack Installation (Branch-Isolated Mode)"
+echo " GPU Stack Installation"
+echo " Driver: $DRV_V"
+echo " NVLink: $NVL_V"
 echo "=============================================="
 
-###############################################################################
-# Step 0: APT Pinning - 580 브랜치 외 차단
-###############################################################################
-echo "[Step 0] Setting APT pin to block non-580 packages..."
-
-# 문제: NVIDIA CUDA repo(580.159.04)와 Ubuntu noble-updates(580.126.20)가
-#       같은 580 브랜치인데 서로 다른 패치 버전을 제공함
-# 해결: NVIDIA CUDA repo 출처를 최우선으로 고정하여 한 세트만 사용
-cat <<'EOF' | sudo tee /etc/apt/preferences.d/nvidia-origin-lock
-# NVIDIA 공식 CUDA 리포지토리를 최고 우선순위로 설정
-# → 모든 nvidia 패키지를 이 출처에서 가져옴 (580.159.04 세트)
-Package: *nvidia* *cuda* *libnvidia* *fabricmanager* *imex* *nscq* *nvlsm* *nvsdm*
-Pin: origin "developer.download.nvidia.com"
-Pin-Priority: 1001
-
-# Ubuntu noble-updates의 nvidia 패키지는 후순위로 밀어냄
-# → NVIDIA repo에 없는 패키지만 여기서 가져옴
-Package: *nvidia* *libnvidia* *fabricmanager* *imex* *nscq*
-Pin: release o=Ubuntu,n=noble-updates
-Pin-Priority: 100
-
-# 595, 535 등 다른 브랜치는 완전 차단
-Package: *nvidia*
-Pin: version 595.*
-Pin-Priority: -1
-
-Package: *nvidia*
-Pin: version 535.*
-Pin-Priority: -1
-EOF
-
-sudo apt-get update
-
-###############################################################################
-# Step 1: 기존 꼬인 패키지 제거
-###############################################################################
-echo "[Step 1] Purging mismatched NVIDIA packages..."
+# 1. 기존 꼬인 패키지 제거
+echo "[Step 1] Purging existing NVIDIA packages..."
 sudo apt-get purge -y '*nvidia*' '*cuda*' '*fabricmanager*' '*nvlsm*' '*imex*' '*nscq*' || true
 sudo apt-get autoremove -y && sudo apt-get autoclean
 
-###############################################################################
-# Step 2: 580 브랜치 버전 자동 탐지
-###############################################################################
-echo "[Step 2] Auto-detecting available 580.x version..."
-
-# nvidia-driver-580-open 기준으로 리포지토리의 580 버전을 탐지
-V=$(apt-cache madison nvidia-driver-580-open 2>/dev/null | awk '{print $3}' | grep "^580\." | head -n 1)
-
-if [ -z "$V" ]; then
-    echo "[ERROR] No 580.x version found for nvidia-driver-580-open"
-    echo "  Check repository configuration (01_setup_repos.sh)"
-    exit 1
-fi
-
-echo "  → Detected version: $V"
-
-###############################################################################
-# Step 3: GPU 드라이버 설치 (Open Kernel - Blackwell 필수)
-###############################################################################
-echo "[Step 3] Installing NVIDIA Driver ($V)..."
+# 2. 드라이버 설치 (Open Kernel — Blackwell 필수)
+echo "[Step 2] Installing NVIDIA Driver ($DRV_V)..."
 sudo apt-get install -y \
-    nvidia-driver-580-open="$V" \
-    nvidia-dkms-580-open="$V" \
-    nvidia-utils-580="$V" \
-    libnvidia-cfg1-580="$V" \
-    libnvidia-common-580="$V" \
-    libnvidia-compute-580="$V" \
-    libnvidia-decode-580="$V" \
-    libnvidia-encode-580="$V" \
-    libnvidia-fbc1-580="$V" \
-    libnvidia-gl-580="$V" \
-    nvidia-kernel-source-580-open="$V"
+    nvidia-driver-580-open="$DRV_V" \
+    nvidia-dkms-580-open="$DRV_V" \
+    nvidia-utils-580="$DRV_V"
 
-###############################################################################
-# Step 4: Fabric Manager 및 NVLink 스택
-# 중요: nvidia-imex-580, libnvidia-nscq-580 처럼 -580 접미사 사용!
-#        접미사 없는 nvidia-imex를 쓰면 595가 끼어듦
-###############################################################################
-echo "[Step 4] Installing Fabric Manager & NVLink stack..."
-
-# FM 버전도 동일하게 탐지
-FM_V=$(apt-cache madison nvidia-fabricmanager-580 2>/dev/null | awk '{print $3}' | grep "^580\." | head -n 1)
-IMEX_V=$(apt-cache madison nvidia-imex-580 2>/dev/null | awk '{print $3}' | grep "^580\." | head -n 1)
-NSCQ_V=$(apt-cache madison libnvidia-nscq-580 2>/dev/null | awk '{print $3}' | grep "^580\." | head -n 1)
-
-echo "  → FM version: ${FM_V:-NOT FOUND}"
-echo "  → IMEX version: ${IMEX_V:-NOT FOUND}"
-echo "  → NSCQ version: ${NSCQ_V:-NOT FOUND}"
-
-# 설치 (버전이 탐지된 경우 고정, 아닌 경우 -580 접미사로 설치)
-sudo apt-get install -y \
-    nvidia-fabricmanager-580${FM_V:+=$FM_V} \
-    nvidia-imex-580${IMEX_V:+=$IMEX_V} \
-    libnvidia-nscq-580${NSCQ_V:+=$NSCQ_V} \
-    nvlsm \
-    libnvsdm \
-    mft
+# 3. NVLink5 스택 (FM + IMEX + NSCQ + MFT 등 일괄 설치)
+echo "[Step 3] Installing NVLink5 stack via nvlink5-580 ($NVL_V)..."
+sudo apt-get install -y nvlink5-580="$NVL_V"
 
 sudo systemctl enable --now nvidia-fabricmanager
 sudo systemctl enable --now nvidia-imex
 
-###############################################################################
-# Step 5: CUDA Toolkit
-###############################################################################
-echo "[Step 5] Installing CUDA Toolkit 13.0..."
+# 4. CUDA Toolkit
+echo "[Step 4] Installing CUDA Toolkit 13.0..."
 sudo apt-get install -y cuda-toolkit-13-0
 
-###############################################################################
-# Step 6: GPUDirect RDMA + 최적화
-###############################################################################
-echo "[Step 6] Configuring GPUDirect RDMA..."
+# 5. GPUDirect RDMA + 최적화
+echo "[Step 5] Configuring GPUDirect RDMA..."
 sudo modprobe nvidia-peermem || true
 echo "nvidia-peermem" | sudo tee /etc/modules-load.d/nvidia-peermem.conf > /dev/null
 echo "options nvidia NVreg_EnablePCIERelaxedOrderingMode=1" | sudo tee /etc/modprobe.d/nvidia.conf > /dev/null
 
-###############################################################################
-# Step 7: 설치 후 버전 일치 검증
-###############################################################################
+# 6. 설치 후 버전 검증
 echo ""
 echo "=============================================="
 echo " Post-install Version Check"
 echo "=============================================="
 echo ""
-dpkg -l | grep -E "nvidia-driver|fabricmanager|imex|nscq" | awk '{printf "  %-40s %s\n", $2, $3}'
+dpkg -l | grep -E "nvidia-driver|fabricmanager|imex|nscq|nvlink5" | awk '{printf "  %-40s %s\n", $2, $3}'
 
 # 595 오염 체크
 if dpkg -l | grep nvidia | grep -q "595"; then
     echo ""
-    echo -e "\e[31m [WARNING] 595 branch packages detected! Check above.\e[0m"
+    echo -e "\e[31m [WARNING] 595 branch contamination detected!\e[0m"
 else
     echo ""
-    echo -e "\e[32m [OK] No 595 contamination. All packages are 580 branch.\e[0m"
+    echo -e "\e[32m [OK] Clean 580.126.20 stack.\e[0m"
 fi
 
 echo ""
-echo "=============================================="
-echo " GPU Stack Installation Complete"
 echo " Please reboot to apply kernel changes."
 echo "=============================================="
