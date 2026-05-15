@@ -12,15 +12,17 @@ DCGM_VERSION="4.5.3-1"
 
 DL_DIR="/tmp/nvidia-debs"
 EXTRA_REPO="/opt/nvidia-pkgs"
-mkdir -p "$DL_DIR" "$EXTRA_REPO"
 
 echo "=============================================="
-echo " Repository Setup (Blackwell Optimized)"
-echo " DCGM Version: ${DCGM_VERSION}"
+echo " Repository Setup (Clean & Precise)"
 echo "=============================================="
 
-# 1. 필수 도구
-echo "[Step 1] Installing prerequisites..."
+# 1. 필수 도구 및 환경 정리
+echo "[Step 1] Cleaning up and installing prerequisites..."
+sudo mkdir -p "$DL_DIR" "$EXTRA_REPO"
+# 기존 찌꺼기(0바이트 파일, 구버전) 강제 삭제
+sudo rm -rf "${EXTRA_REPO}"/*
+
 sudo apt-get update
 sudo apt-get install -y gnupg2 curl ca-certificates wget dpkg-dev
 
@@ -46,7 +48,7 @@ fi
 sudo dpkg -i "$CUDA_DEB"
 sudo cp /var/cuda-repo-ubuntu2404-13-0-local/cuda-*-keyring.gpg /usr/share/keyrings/ 2>/dev/null || true
 
-# 4. Layer 3: 개별 패키지 다운로드 (NVLink5 + DCGM 4.5.3-1)
+# 4. Layer 3: 개별 패키지 다운로드 (존재 여부 검증된 파일만)
 echo "[Step 4] Layer 3: Downloading extra Blackwell packages..."
 NVIDIA_REPO="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64"
 EXTRA_PKGS=(
@@ -57,24 +59,19 @@ EXTRA_PKGS=(
     "libnvsdm_${DRIVER_VERSION}-1_amd64.deb"
     "nvlink5-580_${DRIVER_VERSION}-1_amd64.deb"
     "nvlink5_${DRIVER_VERSION}-1_amd64.deb"
-    # DCGM 4.5.3-1 Blackwell 지원 최신 패키지
-    "datacenter-gpu-manager_${DCGM_VERSION}_amd64.deb"
+    # DCGM 4.5.3-1 (리포지토리에 실재하는 파일명 확인됨)
     "datacenter-gpu-manager-4-core_${DCGM_VERSION}_amd64.deb"
-    "datacenter-gpu-manager-4-service_${DCGM_VERSION}_amd64.deb"
     "datacenter-gpu-manager-4-cuda13_${DCGM_VERSION}_amd64.deb"
     "datacenter-gpu-manager-4-multinode-cuda13_${DCGM_VERSION}_amd64.deb"
 )
 
 for PKG in "${EXTRA_PKGS[@]}"; do
     TARGET="${EXTRA_REPO}/${PKG}"
-    if [ -s "$TARGET" ]; then
-        echo "  → [SKIP] Already exists: ${PKG}"
-    else
-        echo "  → Downloading ${PKG}..."
-        if ! wget -c -q -O "$TARGET" "${NVIDIA_REPO}/${PKG}"; then
-            echo "  [WARN] Failed: ${PKG}"
-            rm -f "$TARGET"
-        fi
+    echo "  → Downloading ${PKG}..."
+    if ! wget -c -q -O "$TARGET" "${NVIDIA_REPO}/${PKG}"; then
+        echo "  [ERROR] Failed to download: ${PKG}. Check filename!"
+        rm -f "$TARGET"
+        exit 1
     fi
 done
 
@@ -111,5 +108,5 @@ echo "deb [signed-by=/usr/share/keyrings/mellanox.gpg] https://linux.mellanox.co
 sudo apt-get update
 
 echo "=============================================="
-echo " Setup complete! DCGM ${DCGM_VERSION} registered."
+echo " Setup complete! Clean state achieved."
 echo "=============================================="
