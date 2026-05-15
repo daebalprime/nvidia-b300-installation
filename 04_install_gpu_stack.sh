@@ -19,9 +19,9 @@ if lsmod | grep -q nouveau; then
     exit 1
 fi
 
-# Step 1: GPU 드라이버
-echo "[Step 1] Installing GPU Driver..."
-echo "  → Ensuring kernel headers for $(uname -r) are installed..."
+# Step 1: GPU 드라이버 및 Pinning 패키지 설치
+echo "[Step 1] Installing GPU Driver with Pinning..."
+sudo apt-get install -y nvidia-driver-pinning-580.126.20
 sudo apt-get install -y linux-headers-$(uname -r)
 sudo apt-get install -y nvidia-driver-${DRIVER_VERSION}-open
 
