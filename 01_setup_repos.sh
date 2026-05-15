@@ -17,13 +17,19 @@ echo "=============================================="
 echo " Repository Setup (Clean & Precise)"
 echo "=============================================="
 
-# 1. 필수 도구 및 환경 정리
-echo "[Step 1] Cleaning up and installing prerequisites..."
+# 0. 디렉토리 정리 및 초기화
+echo "[Step 0] Initializing directory..."
 sudo mkdir -p "$DL_DIR" "$EXTRA_REPO"
-# 기존 찌꺼기(0바이트 파일, 구버전) 강제 삭제
+# 찌꺼기 제거 후, apt update 에러 방지를 위해 빈 인덱스 즉시 생성
 sudo rm -rf "${EXTRA_REPO}"/*
+touch "${EXTRA_REPO}/Packages"
+gzip -c "${EXTRA_REPO}/Packages" > "${EXTRA_REPO}/Packages.gz"
 
-sudo apt-get update
+# 1. 필수 도구 설치
+echo "[Step 1] Installing prerequisites..."
+# 로컬 리포 에러를 무시하고 넘어가기 위해 --allow-releaseinfo-change 등 사용 가능하나,
+# 여기서는 단순히 update 실패를 무시하고 필요한 도구만 설치 시도
+sudo apt-get update || true
 sudo apt-get install -y gnupg2 curl ca-certificates wget dpkg-dev
 
 # 2. Layer 1: GPU Driver Local Repo
@@ -48,7 +54,7 @@ fi
 sudo dpkg -i "$CUDA_DEB"
 sudo cp /var/cuda-repo-ubuntu2404-13-0-local/cuda-*-keyring.gpg /usr/share/keyrings/ 2>/dev/null || true
 
-# 4. Layer 3: 개별 패키지 다운로드 (존재 여부 검증된 파일만)
+# 4. Layer 3: 개별 패키지 다운로드
 echo "[Step 4] Layer 3: Downloading extra Blackwell packages..."
 NVIDIA_REPO="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64"
 EXTRA_PKGS=(
@@ -59,7 +65,6 @@ EXTRA_PKGS=(
     "libnvsdm_${DRIVER_VERSION}-1_amd64.deb"
     "nvlink5-580_${DRIVER_VERSION}-1_amd64.deb"
     "nvlink5_${DRIVER_VERSION}-1_amd64.deb"
-    # DCGM 4.5.3-1 (리포지토리에 실재하는 파일명 확인됨)
     "datacenter-gpu-manager-4-core_${DCGM_VERSION}_amd64.deb"
     "datacenter-gpu-manager-4-cuda13_${DCGM_VERSION}_amd64.deb"
     "datacenter-gpu-manager-4-multinode-cuda13_${DCGM_VERSION}_amd64.deb"
@@ -69,13 +74,13 @@ for PKG in "${EXTRA_PKGS[@]}"; do
     TARGET="${EXTRA_REPO}/${PKG}"
     echo "  → Downloading ${PKG}..."
     if ! wget -c -q -O "$TARGET" "${NVIDIA_REPO}/${PKG}"; then
-        echo "  [ERROR] Failed to download: ${PKG}. Check filename!"
+        echo "  [ERROR] Failed to download: ${PKG}"
         rm -f "$TARGET"
         exit 1
     fi
 done
 
-echo "  → Generating package index..."
+echo "  → Generating real package index..."
 cd "${EXTRA_REPO}"
 dpkg-scanpackages . /dev/null > Packages
 gzip -9c Packages > Packages.gz
@@ -89,7 +94,7 @@ for f in /etc/apt/sources.list.d/cuda*.list /etc/apt/sources.list.d/cuda*.source
     fi
 done
 
-# 6. Layer 3 APT 소스 등록
+# 6. Layer 3 APT 소스 등록 (이미 있으면 덮어씀)
 echo "[Step 6] Registering Layer 3 local repo..."
 echo "deb [trusted=yes] file:${EXTRA_REPO} /" | sudo tee /etc/apt/sources.list.d/nvidia-extra-local.list > /dev/null
 
@@ -104,9 +109,10 @@ wget -qO - --no-check-certificate https://linux.mellanox.com/public/repo/doca/3.
 echo "deb [signed-by=/usr/share/keyrings/mellanox.gpg] https://linux.mellanox.com/public/repo/doca/3.2.1/ubuntu24.04/x86_64/ /" | \
     sudo tee /etc/apt/sources.list.d/doca.list
 
-# 9. APT 캐시 업데이트
+# 9. 최종 APT 캐시 업데이트 (여기서 모든 로컬 패키지가 인식됨)
+echo "[Step 9] Final APT update..."
 sudo apt-get update
 
 echo "=============================================="
-echo " Setup complete! Clean state achieved."
+echo " Setup complete! DCGM 4.5.3-1 and 580.126.20 ready."
 echo "=============================================="
