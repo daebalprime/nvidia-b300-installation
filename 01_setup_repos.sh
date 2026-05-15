@@ -1,30 +1,50 @@
 #!/bin/bash
 ###############################################################################
-# 01_setup_repos.sh (The Ultimate Simplified Version)
-# No local repos, no manual blocking. Just Network Repo + Official Pinning.
+# 01_setup_repos.sh (Nuclear Cleanup & Network-Only Mode)
+# Removes ALL local repo traces and switches to pure Network + Pinning.
 ###############################################################################
 set -euo pipefail
 
 echo "=============================================="
-echo " Modern Version-Locked Setup (via Pinning)"
+echo " Nuclear Cleanup & Network-Only Setup"
 echo "=============================================="
 
-# 1. NVIDIA 공식 네트워크 리포지토리 등록
-echo "[Step 1] Adding official NVIDIA network repository..."
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
-sudo dpkg -i cuda-keyring_1.1-1_all.deb
-sudo apt-get update
+# 1. 로컬 리포지토리 관련 APT 소스 파일 완전 삭제
+echo "[Step 1] Removing local APT source files..."
+sudo rm -f /etc/apt/sources.list.d/nvidia-extra-local.list
+sudo rm -f /etc/apt/sources.list.d/nvidia-extra-local.list.bak
+# 기존에 dpkg -i 로 깔렸던 로컬 리포지토리 설정 파일들도 삭제
+sudo rm -f /etc/apt/sources.list.d/cuda-*-local*.list
+sudo rm -f /etc/apt/sources.list.d/nvidia-driver-local-repo-*.list
 
-# 2. Pinning 패키지 설치 (이게 핵심: 설치하는 순간 126.20으로 모든 패키지 고정됨)
-echo "[Step 2] Installing version-locking package..."
+# 2. 로컬 디렉토리 삭제
+echo "[Step 2] Deleting local repo directories..."
+sudo rm -rf /opt/nvidia-pkgs
+sudo rm -rf /tmp/nvidia-debs
+
+# 3. 로컬 리포지토리 패키지(Keyring 등) 자체를 삭제 (찌꺼기 방지)
+echo "[Step 3] Purging local repo-installer packages..."
+sudo apt-get purge -y "cuda-repo-ubuntu2404-*" "nvidia-driver-local-repo-ubuntu2404-*" || true
+
+# 4. NVIDIA 공식 네트워크 리포지토리 깨끗하게 재등록
+echo "[Step 4] Re-registering official NVIDIA network repository..."
+wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+
+# 5. Pinning 패키지 설치 (오직 네트워크에서만 받음)
+echo "[Step 5] Installing version-locking package from network..."
+sudo apt-get update
 sudo apt-get install -y nvidia-driver-pinning-580.126.20
 
-# 3. DOCA 리포지토리 (네트워크)
-echo "[Step 3] Adding DOCA repository..."
+# 6. DOCA 네트워크 리포지토리 등록
+echo "[Step 6] Adding DOCA network repository..."
 wget -qO - https://linux.mellanox.com/public/repo/doca/3.2.1/ubuntu24.04/x86_64/GPG-KEY-Mellanox.pub | sudo gpg --dearmor -o /usr/share/keyrings/mellanox.gpg --yes
 echo "deb [signed-by=/usr/share/keyrings/mellanox.gpg] https://linux.mellanox.com/public/repo/doca/3.2.1/ubuntu24.04/x86_64/ /" | sudo tee /etc/apt/sources.list.d/doca.list
+
+# 7. 최종 업데이트
 sudo apt-get update
 
 echo "=============================================="
-echo " Setup Complete. Everything is now locked to 580.126.20."
+echo " Cleanup Complete! No more local repo references."
+echo " Now run 04_install_gpu_stack.sh"
 echo "=============================================="
