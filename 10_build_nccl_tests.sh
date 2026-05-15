@@ -24,7 +24,13 @@ fi
 
 # 2. 빌드 환경 설정
 export CUDA_HOME=/usr/local/cuda
-export MPI_HOME=/usr/local/mpi # DOCA-OFED 설치 시 기본 위치 (버전에 따라 확인 필요)
+# OpenMPI 경로는 /usr 를 기본으로 하고, mpicc 위치를 확인
+if command -v mpicc >/dev/null; then
+    MPI_PATH=$(dirname $(dirname $(which mpicc)))
+    export MPI_HOME=${MPI_PATH}
+else
+    export MPI_HOME=/usr
+fi
 
 if [ ! -d "${CUDA_HOME}" ]; then
     echo "[ERROR] CUDA not found at ${CUDA_HOME}. Please run 04_install_gpu_stack.sh first."
@@ -32,11 +38,11 @@ if [ ! -d "${CUDA_HOME}" ]; then
 fi
 
 # 3. 빌드 실행
-echo "[Step 2] Building..."
+echo "[Step 2] Building with MPI_HOME=${MPI_HOME}..."
 cd nccl-tests
 make MPI=1 \
      CUDA_HOME=${CUDA_HOME} \
-     MPI_HOME=${MPI_HOME:-/usr} \
+     MPI_HOME=${MPI_HOME} \
      -j$(nproc)
 
 echo "=============================================="

@@ -65,6 +65,7 @@ EXTRA_PKGS=(
     "libnvsdm-dev_${DRIVER_VERSION}-1_amd64.deb"
     "nvlink5-580_${DRIVER_VERSION}-1_amd64.deb"
     "nvlink5_${DRIVER_VERSION}-1_amd64.deb"
+    "datacenter-gpu-manager_3.3.10_amd64.deb"
 )
 
 for PKG in "${EXTRA_PKGS[@]}"; do

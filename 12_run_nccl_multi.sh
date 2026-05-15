@@ -17,8 +17,11 @@ echo "=============================================="
 echo " Running Multi-node NCCL All-Reduce (2 Nodes, 16 GPUs)"
 echo "=============================================="
 
-# 최적 성능을 위한 환경 변수
+# --- Blackwell / InfiniBand 최적화 ---
 export NCCL_IB_GID_INDEX=3
+export NCCL_IB_ADAPTIVE_ROUTING=1
+export NCCL_IB_QPS_PER_CONNECTION=4
+export NCCL_NET_GDR_LEVEL=5
 export NCCL_DEBUG=INFO
 
 # mpirun 실행 (Node 1에서 실행 기준)
@@ -26,7 +29,9 @@ sudo mpirun --allow-run-as-root -np 16 \
     -H localhost:8,${NODE2_IP}:8 \
     -x NCCL_DEBUG=INFO \
     -x NCCL_IB_GID_INDEX \
-    "${BINARY}" -b 8 -e 8G -f 2 -g 1 -n 20
+    -x NCCL_IB_ADAPTIVE_ROUTING \
+    -x NCCL_NET_GDR_LEVEL \
+    "${BINARY}" -b 1G -e 8G -f 2 -g 1 -n 20
 
 echo "=============================================="
 echo " Test Complete!"
