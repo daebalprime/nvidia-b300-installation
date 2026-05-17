@@ -34,9 +34,9 @@ export NCCL_ALGO=NVLS                       # NVLS, RING, TREE (Blackwell은 NVL
 export NCCL_PROTO=Simple                    # Simple, LL, LL128 (LL은 지연시간 위주)
 
 # [D] 리소스/병렬화 채널 튜닝 (B300 18차선 대응)
-# 근거: GPU당 18개 NVLink 레인을 100% 활용하기 위해 채널 수를 32~64개로 확장
+# 근거: GPU당 18개 NVLink 레인을 100% 활용하기 위해 채널 수를 32개로 확장
 # 1개 채널 = 1개 SM 그룹 점유. 대역폭 포화(Saturation)를 위해 병렬 통신 스레드 확보 필수.
-export NCCL_MAX_CTAS=64                     # (구 NCCL_MAX_NCHANNELS) 대역폭 한계치 돌파용
+export NCCL_MAX_CTAS=32                     # 현재 시스템의 물리적 최대 채널 한계치(32)에 수렴
 export NCCL_MIN_CTAS=16                     # (구 NCCL_MIN_NCHANNELS) 소량 데이터 지연시간 확보용
 export NCCL_GRAPH_MIXING_SUPPORT=1          # 병렬 CUDA Graph 지원
 
@@ -53,13 +53,16 @@ mpirun -np ${NUM_GPUS} \
     -x LD_LIBRARY_PATH \
     -x NCCL_DEBUG \
     -x NCCL_DEBUG_SUBSYS \
+    -x NCCL_TOPO_DUMP_FILE \
+    -x NCCL_BUFFSIZE \
+    -x NCCL_IB_AR_THRESHOLD \
     -x NCCL_NVLS_ENABLE \
     -x NCCL_ALGO \
-    # -x NCCL_PROTO \
-    # -x NCCL_BUFFSIZE \
+    -x NCCL_PROTO \
     -x NCCL_MAX_CTAS \
     -x NCCL_MIN_CTAS \
+    -x NCCL_GRAPH_MIXING_SUPPORT \
     -x NCCL_IB_PCI_RELAXED_ORDERING \
-    # -x NCCL_NET_GDR_LEVEL \
-    # -x NCCL_P2P_LEVEL \
+    -x NCCL_NET_GDR_LEVEL \
+    -x NCCL_P2P_LEVEL \
     ${BINARY} -b 8 -e 8G -f 2 -g 1 -n 20
