@@ -111,7 +111,7 @@ cat "${HOSTFILE}"
 ###############################################################################
 
 # InfiniBand 및 이더넷 인터페이스 명시적 지정 (B300 8-NDR 카드 최적화)
-NCCL_IB_HCA="${NCCL_IB_HCA:-mlx5_0,mlx5_10,mlx5_11,mlx5_14,mlx5_15,mlx5_5,mlx5_8,mlx5_9}"
+NCCL_IB_HCA="${NCCL_IB_HCA:-mlx5}"
 NCCL_SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-enp138s0f1np1}"
 
 # NCCL 환경 변수 (Blackwell HGX 8-NDR Native IB 최적화)
@@ -128,7 +128,7 @@ NCCL_ENV=(
     "-x NCCL_IB_SPLIT_THRESHOLD=0"   # ★ [추가] 대용량 AllReduce 시 메시지 분할 병목 제거
     "-x NCCL_IB_TIMEOUT=23"          # IB 재전송 타임아웃 (2^23 × 4.096μs ≈ 34초)
     "-x NCCL_IB_RETRY_CNT=7"         # IB 재전송 최대 횟수
-    "-x NCCL_CROSS_NIC=1"            # 여러 NIC 간 교차 통신 허용
+    "-x NCCL_CROSS_NIC=0"            # 여러 NIC 간 교차 통신 허용, 켜지마라! 
     "-x NCCL_BUFFSIZE=8388608"       # 통신 버퍼 8MB (대용량 전송 최적화)
     "-x CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
     "-x LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:\${LD_LIBRARY_PATH:-}"
