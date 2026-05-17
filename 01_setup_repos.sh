@@ -18,25 +18,12 @@ echo "=============================================="
 ###############################################################################
 # Step 1: 기존 충돌 소스 정리
 ###############################################################################
-echo "[Step 1] Cleaning up ALL existing NVIDIA packages and APT sources..."
-
-# 1a. 설치된 nvidia/cuda 패키지 전체 제거 (버전 충돌 원천 차단)
-echo "  → Purging installed nvidia/cuda packages..."
-sudo apt-get purge -y "^nvidia-.*" "^libnvidia-.*" "^cuda-.*" "^libnccl.*" 2>/dev/null || true
-sudo apt-get autoremove -y 2>/dev/null || true
-
-# 1b. APT 소스 파일 정리
-echo "  → Removing old APT source files..."
+echo "[Step 1] Cleaning up old APT sources..."
 sudo rm -f /etc/apt/sources.list.d/nvidia-extra-local.list
 sudo rm -f /etc/apt/sources.list.d/nvidia-extra-local.list.bak
 sudo rm -f /etc/apt/sources.list.d/cuda-*-local*.list
 sudo rm -f /etc/apt/sources.list.d/nvidia-driver-local-repo-*.list
-sudo rm -f /etc/apt/preferences.d/nvidia-*
-
-# 1c. APT 캐시 완전 초기화 (오염된 메타데이터 제거)
-echo "  → Flushing APT cache..."
-sudo rm -rf /var/lib/apt/lists/*
-sudo apt-get clean
+sudo apt-get purge -y "cuda-repo-ubuntu2404-*" "nvidia-driver-local-repo-ubuntu2404-*" 2>/dev/null || true
 
 ###############################################################################
 # Step 2: 580.126.20 로컬 리포지토리 .deb 다운로드 및 설치
@@ -112,13 +99,19 @@ Pin-Priority: 1001
 EOF
 
 ###############################################################################
-# Step 5: NVIDIA CUDA 네트워크 리포지토리 등록 (CUDA Toolkit 등 추가 패키지용)
+# Step 5: NVIDIA CUDA 네트워크 리포지토리 등록 + Pinning 패키지 설치
 ###############################################################################
 echo "[Step 5] Registering CUDA network repository..."
 if [ ! -f cuda-keyring_1.1-1_all.deb ]; then
     wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
 fi
 sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt-get update
+
+# ★ 핵심: NVIDIA 공식 Pinning 패키지 설치 (로컬 repo + 수동 Pin + 이 패키지 = 3중 방어)
+echo "[Step 5.5] Installing nvidia-driver-pinning-580.126.20..."
+sudo apt-get install -y nvidia-driver-pinning-580.126.20
+
 
 ###############################################################################
 # Step 6: DOCA 3.2.1 네트워크 리포지토리 등록

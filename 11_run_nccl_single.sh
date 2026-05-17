@@ -1,69 +1,241 @@
 #!/bin/bash
 ###############################################################################
-# 11_run_nccl_single.sh (Array-based Clean Version)
-# [단일 노드] NVLink 5세대 성능 최적화 및 행(Hang) 방지 패치 버전
+# 11_run_nccl_single.sh
+# [폐쇄망 HGX 서버에서 실행]
+# 단일 노드 NCCL 성능 테스트 (8GPU NVSwitch)
+#
+# 목적:
+#   1) Intra-node NVLink 대역폭 실측 → ASTRA-sim BW_INTRA 파라미터
+#   2) Intra-node 레이턴시 실측 → ASTRA-sim LAT_INTRA 파라미터
+#   3) P2P 대역폭/레이턴시 매트릭스 → GPU 토폴로지 검증
+#   4) 각 Collective 연산별 성능 프로파일링
+#
+# 사전 조건:
+#   - 10_build_nccl_tests.sh 완료
+#   - GPU 8장 정상 동작 (nvidia-smi 확인)
+#   - Fabric Manager 실행 중
+#
+# 사용법:
+#   bash 11_run_nccl_single.sh [결과_저장_디렉토리]
+#   예: bash 11_run_nccl_single.sh /data/nccl-results
 ###############################################################################
 set -euo pipefail
 
-NUM_GPUS=${1:-8}
-BINARY="${HOME}/nccl-workspace/nccl-tests/build/all_reduce_perf"
+NCCL_BIN="${NCCL_BIN:-/usr/local/nccl-tests/bin}"
+RESULT_DIR="${1:-/data/nccl-results/single-node}"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+HOSTNAME=$(hostname)
+RESULT_PREFIX="${RESULT_DIR}/${HOSTNAME}_${TIMESTAMP}"
 
-# 1. 경로 설정
-export CUDA_HOME=/usr/local/cuda
-export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}
+# GPU 개수 자동 탐지
+NUM_GPUS=$(nvidia-smi --list-gpus 2>/dev/null | wc -l)
 
-# [A] 디버깅 및 네트워크 소켓 (★싱글 노드 행 방지의 핵심)
+# 환경 변수 강제 주입 (sudo 실행 대비)
+export PATH=/usr/local/cuda-13.0/bin:${PATH}
+export LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64:${LD_LIBRARY_PATH:-}
 export NCCL_DEBUG=INFO
-export NCCL_DEBUG_SUBSYS=GRAPH,INIT,ENV
-export NCCL_SOCKET_IFNAME=lo                # 싱글노드는 루프백(lo)으로 돌려야 방화벽/라우팅 행을 방지함
-export NCCL_TOPO_DUMP_FILE="nccl_topo_single.xml"
-
-# [B] 버퍼 및 네트워크 계층
-export NCCL_BUFFSIZE=4194304
-export NCCL_IB_AR_THRESHOLD=8192
-
-# [C] Blackwell NVLink 최적화
-export NCCL_NVLS_ENABLE=2                   # 2: 지원 안 되거나 실패 시 일반 NVLink로 자동 우회(행 방지)
-export NCCL_ALGO=NVLS
-export NCCL_PROTO=Simple
-
-# [D] 리소스 제어
-export NCCL_MAX_CTAS=32                     # 물리적 채널 상한선에 최적화
-export NCCL_MIN_CTAS=16
-export NCCL_GRAPH_MIXING_SUPPORT=1
-
-# [E] PCIe 및 통신 레벨 설정
-export NCCL_IB_PCI_RELAXED_ORDERING=1
-export NCCL_NET_GDR_LEVEL=4
-export NCCL_P2P_LEVEL=4
 
 echo "=============================================="
-echo " Running Optimized Single Node NCCL Tests"
-echo " Bootstrap Socket Interface: ${NCCL_SOCKET_IFNAME}"
+echo " Single-node NCCL Performance Test (NVSwitch)"
+echo " Host: ${HOSTNAME}"
+echo " GPU Count: ${NUM_GPUS}"
+echo " Results:  ${RESULT_PREFIX}_*.log"
 echo "=============================================="
 
-# ★옵션 관리 및 주석 처리가 백배 편해지는 배열 구조
-MPI_OPTS=(
-    -np ${NUM_GPUS}
-    --allow-run-as-root
-    --bind-to none
-    -x LD_LIBRARY_PATH
-    -x NCCL_DEBUG
-    -x NCCL_DEBUG_SUBSYS
-    -x NCCL_SOCKET_IFNAME
-    -x NCCL_TOPO_DUMP_FILE
-    -x NCCL_BUFFSIZE
-    -x NCCL_IB_AR_THRESHOLD
-    -x NCCL_NVLS_ENABLE
-    -x NCCL_ALGO
-    -x NCCL_PROTO
-    -x NCCL_MAX_CTAS
-    -x NCCL_MIN_CTAS
-    -x NCCL_GRAPH_MIXING_SUPPORT
-    -x NCCL_IB_PCI_RELAXED_ORDERING
-    -x NCCL_NET_GDR_LEVEL
-    -x NCCL_P2P_LEVEL
-)
+###############################################################################
+# 사전 검증
+###############################################################################
+echo ""
+echo "[Pre-verification]"
 
-# 실행 (백슬래시 없이 깔끔하게 연동)
-mpirun "${MPI_OPTS[@]}" ${BINARY} -b 8 -e 8G -f 2 -g 1 -n 20
+if [ ! -f "${NCCL_BIN}/all_reduce_perf" ]; then
+    echo "  [ERROR] NCCL Tests binary not found: ${NCCL_BIN}"
+    echo "         Please run 10_build_nccl_tests.sh first."
+    exit 1
+fi
+
+if [ "${NUM_GPUS}" -lt 2 ]; then
+    echo "  [ERROR] Less than 2 GPUs detected. At least 2 are required."
+    exit 1
+fi
+
+# Fabric Manager 확인
+if ! systemctl is-active nvidia-fabricmanager &>/dev/null; then
+    echo "  [WARNING] Fabric Manager is not running."
+    echo "         Optimal performance via NVSwitch may not be achieved."
+fi
+
+# nvidia-peermem 확인
+if ! lsmod | grep -q nvidia_peermem; then
+    echo "  [WARNING] nvidia-peermem is not loaded."
+    echo "         This may affect GPUDirect RDMA performance."
+fi
+
+mkdir -p "${RESULT_DIR}"
+
+echo "  [Complete] Pre-verification passed"
+
+###############################################################################
+# NCCL 환경 변수 (싱글 노드 NVSwitch 최적화)
+#
+# ★ 핵심 원칙: 싱글 노드에서는 NCCL 자동 탐지에 맡긴다.
+#   NCCL_ALGO, NCCL_PROTO, NCCL_P2P_LEVEL, NCCL_NET_GDR_LEVEL 등을
+#   강제 설정하면 NVSwitch 경로 탐지를 방해하여 행(hang) 발생.
+###############################################################################
+export NCCL_DEBUG=INFO
+export NCCL_DEBUG_SUBSYS=INIT,NET
+export CUDA_VISIBLE_DEVICES=$(seq -s, 0 $((NUM_GPUS-1)))
+
+# 싱글 노드 안정성 설정
+export NCCL_SOCKET_IFNAME=lo             # 싱글노드 bootstrap — 루프백으로 방화벽 우회
+export NCCL_NVLS_ENABLE=2                # NVLS 지원 시 사용, 미지원 시 자동 폴백
+export NCCL_SHM_DISABLE=0                # Shared Memory 활성화
+export NCCL_BUFFSIZE=8388608             # 8MB 버퍼
+
+# 공통 테스트 파라미터
+COMMON_ARGS="-g ${NUM_GPUS} -n 100 -w 20"
+# -g: GPU 수 (프로세스 1개가 8GPU 전부 사용)
+# -n: 반복 횟수 (정확도를 위해 100회)
+# -w: 워밍업 횟수
+
+###############################################################################
+# Test 1: AllReduce (핵심 — BW_INTRA 측정)
+###############################################################################
+echo ""
+echo "=============================================="
+echo " [1/6] AllReduce Bandwidth/Latency Test"
+echo " → Measuring ASTRA-sim BW_INTRA, LAT_INTRA"
+echo "=============================================="
+echo ""
+
+LOGFILE="${RESULT_PREFIX}_allreduce.log"
+
+echo "--- AllReduce: 8B ~ 8GB, factor 2 ---"
+echo ""
+${NCCL_BIN}/all_reduce_perf \
+    -b 8 -e 8G -f 2 \
+    ${COMMON_ARGS} \
+    -c 1 -z 0 2>&1 | tee "${LOGFILE}"
+
+echo ""
+echo "  ⭐ ASTRA-sim Parameter Extraction Guide:"
+echo "     BW_INTRA: busbw value for messages >= 1GB (GB/s)"
+echo "     LAT_INTRA: avg time for 8B-4KB messages (us) -> convert to ns"
+echo ""
+echo "  Results saved: ${LOGFILE}"
+
+###############################################################################
+# Test 2: AllReduce 소량 메시지 (레이턴시 정밀 측정)
+###############################################################################
+echo ""
+echo "=============================================="
+echo " [2/6] AllReduce Precision Latency Measurement"
+echo " → Small messages (8B - 64KB)"
+echo "=============================================="
+echo ""
+
+LOGFILE="${RESULT_PREFIX}_allreduce_latency.log"
+
+${NCCL_BIN}/all_reduce_perf \
+    -b 8 -e 64K -f 2 \
+    ${COMMON_ARGS} \
+    -c 1 -z 0 2>&1 | tee "${LOGFILE}"
+
+echo ""
+echo "  Results saved: ${LOGFILE}"
+
+###############################################################################
+# Test 3: AllGather
+###############################################################################
+echo ""
+echo "=============================================="
+echo " [3/6] AllGather Bandwidth Test"
+echo "=============================================="
+echo ""
+
+LOGFILE="${RESULT_PREFIX}_allgather.log"
+
+${NCCL_BIN}/all_gather_perf \
+    -b 8 -e 8G -f 2 \
+    ${COMMON_ARGS} \
+    -c 1 -z 0 2>&1 | tee "${LOGFILE}"
+
+echo "  Results saved: ${LOGFILE}"
+
+###############################################################################
+# Test 4: ReduceScatter
+###############################################################################
+echo ""
+echo "=============================================="
+echo " [4/6] ReduceScatter Bandwidth Test"
+echo "=============================================="
+echo ""
+
+LOGFILE="${RESULT_PREFIX}_reducescatter.log"
+
+${NCCL_BIN}/reduce_scatter_perf \
+    -b 8 -e 8G -f 2 \
+    ${COMMON_ARGS} \
+    -c 1 -z 0 2>&1 | tee "${LOGFILE}"
+
+echo "  Results saved: ${LOGFILE}"
+
+###############################################################################
+# Test 5: AllToAll
+###############################################################################
+echo ""
+echo "=============================================="
+echo " [5/6] AllToAll Bandwidth Test"
+echo "=============================================="
+echo ""
+
+LOGFILE="${RESULT_PREFIX}_alltoall.log"
+
+${NCCL_BIN}/alltoall_perf \
+    -b 8 -e 8G -f 2 \
+    ${COMMON_ARGS} \
+    -c 1 -z 0 2>&1 | tee "${LOGFILE}"
+
+echo "  Results saved: ${LOGFILE}"
+
+###############################################################################
+# Test 6: SendRecv (P2P 대역폭)
+###############################################################################
+echo ""
+echo "=============================================="
+echo " [6/6] SendRecv P2P Bandwidth Test"
+echo "=============================================="
+echo ""
+
+LOGFILE="${RESULT_PREFIX}_sendrecv.log"
+
+${NCCL_BIN}/sendrecv_perf \
+    -b 8 -e 8G -f 2 \
+    ${COMMON_ARGS} \
+    -c 1 -z 0 2>&1 | tee "${LOGFILE}"
+
+echo "  Results saved: ${LOGFILE}"
+
+###############################################################################
+# 결과 요약
+###############################################################################
+echo ""
+echo "=============================================="
+echo " Single-node NCCL Test Complete!"
+echo "=============================================="
+echo ""
+echo " Result Files:"
+ls -la "${RESULT_PREFIX}"_*.log 2>/dev/null
+echo ""
+echo " ⭐ ASTRA-sim Calibration Value Extraction:"
+echo "    1) 1GB busbw (GB/s) from AllReduce log -> variables.env BW_INTRA"
+echo "    2) 8B avg time (μs x 1000) from AllReduce Latency log -> variables.env LAT_INTRA"
+echo ""
+echo " Check GPU Topology:"
+echo "    nvidia-smi topo -m"
+echo ""
+echo " Expected NVSwitch B300 Performance:"
+echo "    BusBw Target: 750 - 850 GB/s (NV18 full mesh)"
+echo ""
+echo " Next: 12_run_nccl_multi.sh (Multi-node test)"
+echo ""
