@@ -25,6 +25,8 @@ sudo apt-get install -y \
     nvlsm \
     libnccl2 \
     libnccl-dev \
+    doca-runtime \
+    doca-sdk \
     datacenter-gpu-manager-4-core \
     datacenter-gpu-manager-4-multinode-cuda13
 

@@ -42,8 +42,8 @@ export NCCL_GRAPH_MIXING_SUPPORT=1          # 병렬 CUDA Graph 지원
 
 # [E] PCIe 및 통신 레벨 설정
 export NCCL_IB_PCI_RELAXED_ORDERING=1       # PCIe 전송 효율 극대화 (1: 강제 활성)
-export NCCL_NET_GDR_LEVEL=5                 # GDR 경로 거리 (5: SYS, 최대로 허용)
-export NCCL_P2P_LEVEL=5                     # P2P 통신 허용 범위 (5: SYS)
+export NCCL_NET_GDR_LEVEL=2                 # GDR 경로 거리 (5: SYS, 최대로 허용)
+export NCCL_P2P_LEVEL=2                     # P2P 통신 허용 범위 (5: SYS)
 
 # [실행]
 # --bind-to none: MPI 프로세스가 특정 코어에 묶여 NCCL 스레드 성능을 저하시키는 현상 방지
@@ -55,11 +55,11 @@ mpirun -np ${NUM_GPUS} \
     -x NCCL_DEBUG_SUBSYS \
     -x NCCL_NVLS_ENABLE \
     -x NCCL_ALGO \
-    -x NCCL_PROTO \
-    -x NCCL_BUFFSIZE \
+    # -x NCCL_PROTO \
+    # -x NCCL_BUFFSIZE \
     -x NCCL_MAX_CTAS \
     -x NCCL_MIN_CTAS \
     -x NCCL_IB_PCI_RELAXED_ORDERING \
-    -x NCCL_NET_GDR_LEVEL \
-    -x NCCL_P2P_LEVEL \
+    # -x NCCL_NET_GDR_LEVEL \
+    # -x NCCL_P2P_LEVEL \
     ${BINARY} -b 8 -e 8G -f 2 -g 1 -n 20
