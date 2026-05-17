@@ -78,20 +78,18 @@ else
     echo "         apt-get install -y openmpi-bin libopenmpi-dev"
 fi
 
-# nccl-tests 소스 확인
+# 빌드 필수 패키지 설치
+echo "  → Installing build prerequisites..."
+sudo apt-get install -y git build-essential libopenmpi-dev
+
+# nccl-tests 소스 다운로드 (없으면 자동 clone)
 if [ ! -d "${NCCL_TESTS_SRC}" ]; then
-    echo ""
-    echo "  [ERROR] nccl-tests source not found: ${NCCL_TESTS_SRC}"
-    echo ""
-    echo "  Download on Seed Machine and copy to the server:"
-    echo "    git clone https://github.com/NVIDIA/nccl-tests.git"
-    echo "    or"
-    echo "    wget https://github.com/NVIDIA/nccl-tests/archive/refs/heads/master.zip"
-    echo ""
-    echo "  In air-gapped environment:"
-    echo "    unzip nccl-tests-master.zip -d /opt/"
-    echo "    mv /opt/nccl-tests-master /opt/nccl-tests"
-    exit 1
+    echo "  → nccl-tests not found, cloning from GitHub..."
+    sudo mkdir -p "$(dirname ${NCCL_TESTS_SRC})"
+    sudo git clone https://github.com/NVIDIA/nccl-tests.git "${NCCL_TESTS_SRC}"
+else
+    echo "  → nccl-tests found, pulling latest..."
+    cd "${NCCL_TESTS_SRC}" && sudo git pull || true
 fi
 
 echo "  nccl-tests Source: ${NCCL_TESTS_SRC}"
