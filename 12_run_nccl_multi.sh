@@ -112,7 +112,7 @@ cat "${HOSTFILE}"
 
 # InfiniBand 및 이더넷 인터페이스 명시적 지정 (B300 8-NDR 카드 최적화)
 NCCL_IB_HCA="${NCCL_IB_HCA:-mlx5_0,mlx5_10,mlx5_11,mlx5_14,mlx5_15,mlx5_5,mlx5_8,mlx5_9}"
-NCCL_SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-enp138s0f0np0}"
+NCCL_SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-enp138s0f1np1}"
 
 # NCCL 환경 변수 (Blackwell HGX 8-NDR Native IB 최적화)
 NCCL_ENV=(
