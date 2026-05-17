@@ -9,9 +9,10 @@ echo "=============================================="
 echo " GPU Stack Installation (Precise Mode)"
 echo "=============================================="
 
-# 1. 드라이버 및 커널 헤더 설치
-# Blackwell은 반드시 'open' 드라이버를 써야 합니다.
-echo "[Step 1] Installing Open Kernel Driver..."
+# 1. 커널 패키지 고정 및 헤더 설치
+# 드라이버 설치 중 원치 않는 커널 업그레이드가 트리거되는 것을 원천 차단(Hold)합니다.
+echo "[Step 1] Pinning current kernel packages..."
+sudo apt-mark hold linux-generic linux-image-generic linux-headers-generic || true
 sudo apt-get install -y linux-headers-$(uname -r)
 sudo apt-get install -y nvidia-driver-580-open
 
