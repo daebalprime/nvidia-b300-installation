@@ -117,7 +117,7 @@ NCCL_SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-enp138s0f1np1}"
 # NCCL 환경 변수 (Blackwell HGX 8-NDR Native IB 최적화)
 NCCL_ENV=(
     "-x NCCL_DEBUG=INFO"
-    "-x NCCL_DEBUG_SUBSYS=INIT,NET"
+    "-x NCCL_DEBUG_SUBSYS=INIT,GRAPH,NET"
     "-x NCCL_IB_DISABLE=0"           # InfiniBand 사용
     "-x NCCL_NET_GDR_LEVEL=5"        # GPUDirect RDMA 레벨 5 (GPU↔NIC 직접 전송)
     "-x NCCL_IB_HCA=${NCCL_IB_HCA}"  # ★ [명시] 데이터 통신에 사용할 8개 NDR 인피니밴드 인터페이스 지정
