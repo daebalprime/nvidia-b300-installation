@@ -137,7 +137,7 @@ NCCL_ENV=(
     "-x NCCL_IB_RETRY_CNT=7"         # IB 재전송 최대 횟수
     "-x NCCL_CROSS_NIC=1"            # 여러 NIC 간 교차 통신 허용, 켜지마라! 
     "-x NCCL_BUFFSIZE=16777216"       # 통신 버퍼 8MB (대용량 전송 최적화)
-    "-x NCCL_ALGO=${NCCL_ALGO}"      # ★ [추가] NCCL 알고리즘 명시 지정
+    # "-x NCCL_ALGO=${NCCL_ALGO}"      # ★ [추가] NCCL 알고리즘 명시 지정
     "-x CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
     "-x LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:\${LD_LIBRARY_PATH:-}"
 )
