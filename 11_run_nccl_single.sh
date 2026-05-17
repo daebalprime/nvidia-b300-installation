@@ -4,11 +4,7 @@
 # [폐쇄망 HGX 서버에서 실행]
 # 단일 노드 NCCL 성능 테스트 (8GPU NVSwitch)
 #
-# 목적:
-#   1) Intra-node NVLink 대역폭 실측 → ASTRA-sim BW_INTRA 파라미터
-#   2) Intra-node 레이턴시 실측 → ASTRA-sim LAT_INTRA 파라미터
-#   3) P2P 대역폭/레이턴시 매트릭스 → GPU 토폴로지 검증
-#   4) 각 Collective 연산별 성능 프로파일링
+# 참고: H200 실제 동작 스크립트 기반으로 B300 NVSwitch에 맞게 최적화
 #
 # 사전 조건:
 #   - 10_build_nccl_tests.sh 완료
@@ -16,8 +12,7 @@
 #   - Fabric Manager 실행 중
 #
 # 사용법:
-#   bash 11_run_nccl_single.sh [결과_저장_디렉토리]
-#   예: bash 11_run_nccl_single.sh /data/nccl-results
+#   sudo -E bash 11_run_nccl_single.sh [결과_저장_디렉토리]
 ###############################################################################
 set -euo pipefail
 
@@ -31,9 +26,9 @@ RESULT_PREFIX="${RESULT_DIR}/${HOSTNAME}_${TIMESTAMP}"
 NUM_GPUS=$(nvidia-smi --list-gpus 2>/dev/null | wc -l)
 
 # 환경 변수 강제 주입 (sudo 실행 대비)
-export PATH=/usr/local/cuda-13.0/bin:${PATH}
-export LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64:${LD_LIBRARY_PATH:-}
-export NCCL_DEBUG=INFO
+export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda-13.0}"
+export PATH="${CUDA_HOME}/bin:${PATH}"
+export LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH:-}"
 
 echo "=============================================="
 echo " Single-node NCCL Performance Test (NVSwitch)"
@@ -61,42 +56,91 @@ fi
 
 # Fabric Manager 확인
 if ! systemctl is-active nvidia-fabricmanager &>/dev/null; then
-    echo "  [WARNING] Fabric Manager is not running."
-    echo "         Optimal performance via NVSwitch may not be achieved."
+    echo "  [WARNING] Fabric Manager is not running!"
+    echo "         sudo systemctl enable --now nvidia-fabricmanager"
 fi
 
 # nvidia-peermem 확인
 if ! lsmod | grep -q nvidia_peermem; then
-    echo "  [WARNING] nvidia-peermem is not loaded."
-    echo "         This may affect GPUDirect RDMA performance."
+    echo "  [WARNING] nvidia_peermem is not loaded."
+    echo "         Run: sudo modprobe nvidia-peermem"
 fi
 
 mkdir -p "${RESULT_DIR}"
-
 echo "  [Complete] Pre-verification passed"
 
 ###############################################################################
-# NCCL 환경 변수 (싱글 노드 NVSwitch 최적화)
+# NCCL 환경 변수 (H200 실증 기반 + B300 NVSwitch 최적화)
 #
-# ★ 핵심 원칙: 싱글 노드에서는 NCCL 자동 탐지에 맡긴다.
-#   NCCL_ALGO, NCCL_PROTO, NCCL_P2P_LEVEL, NCCL_NET_GDR_LEVEL 등을
-#   강제 설정하면 NVSwitch 경로 탐지를 방해하여 행(hang) 발생.
+# ★ 핵심 원칙:
+#   - H200에서 검증된 설정을 기반으로 함
+#   - 싱글 노드: SHARP 비활성, CPU Affinity 무시, NVLS 활성
+#   - ALGO, PROTO, P2P_LEVEL 등은 자동 탐지에 맡김
 ###############################################################################
-export NCCL_DEBUG=INFO
-export NCCL_DEBUG_SUBSYS=INIT,NET
-export CUDA_VISIBLE_DEVICES=$(seq -s, 0 $((NUM_GPUS-1)))
 
-# 싱글 노드 안정성 설정
-export NCCL_SOCKET_IFNAME=lo             # 싱글노드 bootstrap — 루프백으로 방화벽 우회
-export NCCL_NVLS_ENABLE=2                # NVLS 지원 시 사용, 미지원 시 자동 폴백
-export NCCL_SHM_DISABLE=0                # Shared Memory 활성화
-export NCCL_BUFFSIZE=8388608             # 8MB 버퍼
+# 디버그 및 기본 설정
+export NCCL_DEBUG=INFO
+export NCCL_DEBUG_SUBSYS=INIT,GRAPH
+export NCCL_SOCKET_IFNAME=lo                 # 싱글노드 bootstrap — 루프백
+
+# 성능 & 안정성 (H200 레퍼런스 기반)
+export NCCL_SHARP_DISABLE=1                  # ★ 싱글노드에서 SHARP 비활성 (행 방지)
+export NCCL_NVLS_ENABLE=1                    # NVLink SHARP 활성화
+export NCCL_IGNORE_CPU_AFFINITY=1            # ★ CPU affinity 무시 (mpirun 호환)
+export NCCL_SHM_DISABLE=0                    # Shared Memory 활성화
+export NCCL_BUFFSIZE=8388608                 # 8MB 버퍼
+
+# MPI 설정 (btl 충돌 방지)
+export OMPI_MCA_btl=^openib                  # ★ openib btl 비활성 (UCX 사용)
+
+###############################################################################
+# 실행 방식 결정
+###############################################################################
+USE_MPI=false
+if command -v mpirun &>/dev/null; then
+    USE_MPI=true
+    echo ""
+    echo "  [MPI Mode] mpirun detected → ${NUM_GPUS} processes × 1 GPU each"
+else
+    echo ""
+    echo "  [Direct Mode] mpirun not found → single process × ${NUM_GPUS} GPUs"
+fi
+
+# MPI 공통 옵션 (H200 레퍼런스 기반)
+MPI_OPTS=(
+    -np ${NUM_GPUS}
+    --allow-run-as-root
+    --bind-to none
+    --mca btl ^openib
+    --mca pml ob1
+    -x LD_LIBRARY_PATH
+    -x PATH
+    -x NCCL_DEBUG
+    -x NCCL_DEBUG_SUBSYS
+    -x NCCL_SOCKET_IFNAME
+    -x NCCL_SHARP_DISABLE
+    -x NCCL_NVLS_ENABLE
+    -x NCCL_IGNORE_CPU_AFFINITY
+    -x NCCL_SHM_DISABLE
+    -x NCCL_BUFFSIZE
+    -x OMPI_MCA_btl
+)
+
+# 테스트 실행 함수
+run_test() {
+    local BINARY="$1"
+    local ARGS="$2"
+    local LOGFILE="$3"
+
+    if [ "${USE_MPI}" = true ]; then
+        mpirun "${MPI_OPTS[@]}" ${BINARY} ${ARGS} -g 1 2>&1 | tee "${LOGFILE}"
+    else
+        ${BINARY} ${ARGS} -g ${NUM_GPUS} 2>&1 | tee "${LOGFILE}"
+    fi
+}
 
 # 공통 테스트 파라미터
-COMMON_ARGS="-g ${NUM_GPUS} -n 100 -w 20"
-# -g: GPU 수 (프로세스 1개가 8GPU 전부 사용)
-# -n: 반복 횟수 (정확도를 위해 100회)
-# -w: 워밍업 횟수
+COMMON_ARGS="-n 100 -w 20 -c 1 -z 0"
 
 ###############################################################################
 # Test 1: AllReduce (핵심 — BW_INTRA 측정)
@@ -109,13 +153,7 @@ echo "=============================================="
 echo ""
 
 LOGFILE="${RESULT_PREFIX}_allreduce.log"
-
-echo "--- AllReduce: 8B ~ 8GB, factor 2 ---"
-echo ""
-${NCCL_BIN}/all_reduce_perf \
-    -b 8 -e 8G -f 2 \
-    ${COMMON_ARGS} \
-    -c 1 -z 0 2>&1 | tee "${LOGFILE}"
+run_test "${NCCL_BIN}/all_reduce_perf" "-b 8 -e 8G -f 2 ${COMMON_ARGS}" "${LOGFILE}"
 
 echo ""
 echo "  ⭐ ASTRA-sim Parameter Extraction Guide:"
@@ -135,11 +173,7 @@ echo "=============================================="
 echo ""
 
 LOGFILE="${RESULT_PREFIX}_allreduce_latency.log"
-
-${NCCL_BIN}/all_reduce_perf \
-    -b 8 -e 64K -f 2 \
-    ${COMMON_ARGS} \
-    -c 1 -z 0 2>&1 | tee "${LOGFILE}"
+run_test "${NCCL_BIN}/all_reduce_perf" "-b 8 -e 64K -f 2 ${COMMON_ARGS}" "${LOGFILE}"
 
 echo ""
 echo "  Results saved: ${LOGFILE}"
@@ -154,11 +188,7 @@ echo "=============================================="
 echo ""
 
 LOGFILE="${RESULT_PREFIX}_allgather.log"
-
-${NCCL_BIN}/all_gather_perf \
-    -b 8 -e 8G -f 2 \
-    ${COMMON_ARGS} \
-    -c 1 -z 0 2>&1 | tee "${LOGFILE}"
+run_test "${NCCL_BIN}/all_gather_perf" "-b 8 -e 8G -f 2 ${COMMON_ARGS}" "${LOGFILE}"
 
 echo "  Results saved: ${LOGFILE}"
 
@@ -172,11 +202,7 @@ echo "=============================================="
 echo ""
 
 LOGFILE="${RESULT_PREFIX}_reducescatter.log"
-
-${NCCL_BIN}/reduce_scatter_perf \
-    -b 8 -e 8G -f 2 \
-    ${COMMON_ARGS} \
-    -c 1 -z 0 2>&1 | tee "${LOGFILE}"
+run_test "${NCCL_BIN}/reduce_scatter_perf" "-b 8 -e 8G -f 2 ${COMMON_ARGS}" "${LOGFILE}"
 
 echo "  Results saved: ${LOGFILE}"
 
@@ -190,11 +216,7 @@ echo "=============================================="
 echo ""
 
 LOGFILE="${RESULT_PREFIX}_alltoall.log"
-
-${NCCL_BIN}/alltoall_perf \
-    -b 8 -e 8G -f 2 \
-    ${COMMON_ARGS} \
-    -c 1 -z 0 2>&1 | tee "${LOGFILE}"
+run_test "${NCCL_BIN}/alltoall_perf" "-b 8 -e 8G -f 2 ${COMMON_ARGS}" "${LOGFILE}"
 
 echo "  Results saved: ${LOGFILE}"
 
@@ -208,11 +230,7 @@ echo "=============================================="
 echo ""
 
 LOGFILE="${RESULT_PREFIX}_sendrecv.log"
-
-${NCCL_BIN}/sendrecv_perf \
-    -b 8 -e 8G -f 2 \
-    ${COMMON_ARGS} \
-    -c 1 -z 0 2>&1 | tee "${LOGFILE}"
+run_test "${NCCL_BIN}/sendrecv_perf" "-b 8 -e 8G -f 2 ${COMMON_ARGS}" "${LOGFILE}"
 
 echo "  Results saved: ${LOGFILE}"
 
