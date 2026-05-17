@@ -12,7 +12,7 @@
 ###############################################################################
 set -euo pipefail
 
-NODE2_IP="${1:-}"
+HOSTS_FILE="${1:-hostnames.txt}"
 RESULT_DIR="${2:-/data/nccl-results/multi-node}"
 NCCL_BIN="${NCCL_BIN:-/usr/local/nccl-tests/bin}"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -20,32 +20,43 @@ HOSTNAME=$(hostname)
 RESULT_PREFIX="${RESULT_DIR}/${HOSTNAME}_multi_${TIMESTAMP}"
 
 NUM_GPUS_PER_NODE=8
-NUM_NODES=2
-TOTAL_GPUS=$((NUM_GPUS_PER_NODE * NUM_NODES))
 
 NODE1_IP=$(hostname -I | awk '{print $1}')
 
-echo "=============================================="
-echo " Multi-node NCCL Performance Test"
-echo " Node 1: ${NODE1_IP} ($(hostname))"
-echo " Node 2: ${NODE2_IP}"
-echo " Config:   ${NUM_NODES} Nodes x ${NUM_GPUS_PER_NODE} GPUs = ${TOTAL_GPUS} GPUs"
-echo " Results:  ${RESULT_PREFIX}_*.log"
-echo "=============================================="
-
 ###############################################################################
-# 사전 검증
+# 사전 검증 및 호스트 파싱
 ###############################################################################
 echo ""
-echo "[Pre-verification]"
+echo "[Pre-verification & Host Parsing]"
 
-# 인자 확인
-if [ -z "${NODE2_IP}" ]; then
-    echo "  [ERROR] Please provide Node 2 IP address."
-    echo "  Usage: bash 12_run_nccl_multi.sh <NODE2_IP>"
-    echo "  Example: bash 12_run_nccl_multi.sh 10.0.0.2"
+# hosts 파일 확인
+if [ ! -f "${HOSTS_FILE}" ]; then
+    echo "  [ERROR] Hosts file not found: ${HOSTS_FILE}"
+    echo "  Please create '${HOSTS_FILE}' with the list of node IPs (one per line)."
+    echo "  Usage: bash 12_run_nccl_multi.sh [hosts_file_path] [result_dir]"
     exit 1
 fi
+
+# 주석 및 빈 줄 제외하고 노드 리스트 읽기
+NODES=()
+while IFS= read -r line || [ -n "$line" ]; do
+    line=$(echo "${line}" | sed 's/#.*//' | xargs)
+    if [ -n "${line}" ]; then
+        NODES+=("${line}")
+    fi
+done < "${HOSTS_FILE}"
+
+NUM_NODES=${#NODES[@]}
+TOTAL_GPUS=$((NUM_GPUS_PER_NODE * NUM_NODES))
+
+if [ "${NUM_NODES}" -lt 2 ]; then
+    echo "  [ERROR] At least 2 nodes are required for multi-node testing."
+    echo "         Found only ${NUM_NODES} node(s) in ${HOSTS_FILE}."
+    exit 1
+fi
+
+echo "  Nodes parsed from ${HOSTS_FILE}: ${NODES[*]}"
+echo "  Total Target GPUs: ${TOTAL_GPUS} (${NUM_NODES} Nodes x ${NUM_GPUS_PER_NODE} GPUs)"
 
 # 바이너리 확인
 if [ ! -f "${NCCL_BIN}/all_reduce_perf" ]; then
@@ -60,25 +71,24 @@ if ! command -v mpirun &>/dev/null; then
     exit 1
 fi
 
-# SSH 연결 확인
-echo "  → Testing SSH connection to Node 2..."
-if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "${NODE2_IP}" "hostname" &>/dev/null; then
-    echo "  [ERROR] Cannot connect to Node 2 (${NODE2_IP}) via SSH."
-    echo ""
-    echo "  SSH Key Setup:"
-    echo "    ssh-keygen -t ed25519  # Skip if already exists"
-    echo "    ssh-copy-id ${NODE2_IP}"
-    echo ""
-    exit 1
-fi
-echo "  SSH: $(ssh -o BatchMode=yes ${NODE2_IP} hostname)"
+# SSH 연결 확인 (본인 호스트 제외한 타겟 노드 검사)
+for node in "${NODES[@]}"; do
+    if [ "${node}" != "${NODE1_IP}" ] && [ "${node}" != "127.0.0.1" ] && [ "${node}" != "localhost" ]; then
+        echo "  → Testing SSH connection to ${node}..."
+        if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "${node}" "hostname" &>/dev/null; then
+            echo "  [ERROR] Cannot connect to node ${node} via SSH."
+            echo "  Please verify SSH key setup: ssh-copy-id ${node}"
+            exit 1
+        fi
+        echo "    SSH Connection to ${node} OK: $(ssh -o BatchMode=yes ${node} hostname)"
+    fi
+done
 
 # InfiniBand 확인
 echo "  → Checking InfiniBand status..."
 ibstat 2>/dev/null | head -5 || echo "  [WARNING] Failed to run ibstat"
 
 mkdir -p "${RESULT_DIR}"
-
 echo "  [Complete] Pre-verification passed"
 
 ###############################################################################
@@ -88,17 +98,21 @@ echo ""
 echo "[Hostfile Generation]"
 
 HOSTFILE="${RESULT_DIR}/hostfile_${TIMESTAMP}"
-cat > "${HOSTFILE}" << EOF
-${NODE1_IP} slots=${NUM_GPUS_PER_NODE}
-${NODE2_IP} slots=${NUM_GPUS_PER_NODE}
-EOF
+rm -f "${HOSTFILE}"
+for node in "${NODES[@]}"; do
+    echo "${node} slots=${NUM_GPUS_PER_NODE}" >> "${HOSTFILE}"
+done
 
-echo "  Hostfile: ${HOSTFILE}"
+echo "  Hostfile generated: ${HOSTFILE}"
 cat "${HOSTFILE}"
 
 ###############################################################################
 # NCCL / MPI 환경 변수
 ###############################################################################
+
+# InfiniBand 및 이더넷 인터페이스 명시적 지정 (B300 8-NDR 카드 최적화)
+NCCL_IB_HCA="${NCCL_IB_HCA:-mlx5_0,mlx5_10,mlx5_11,mlx5_14,mlx5_15,mlx5_5,mlx5_8,mlx5_9}"
+NCCL_SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-enp138s0f0np0}"
 
 # NCCL 환경 변수
 NCCL_ENV=(
@@ -106,11 +120,12 @@ NCCL_ENV=(
     "-x NCCL_DEBUG_SUBSYS=INIT,NET"
     "-x NCCL_IB_DISABLE=0"           # InfiniBand 사용
     "-x NCCL_NET_GDR_LEVEL=5"        # GPUDirect RDMA 레벨 5 (GPU↔NIC 직접 전송)
+    "-x NCCL_IB_HCA=${NCCL_IB_HCA}"  # ★ [명시] 데이터 통신에 사용할 8개 NDR 인피니밴드 인터페이스 지정
+    "-x NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME}" # ★ [명시] 핸드셰이크 및 TCP 부트스트랩용 이더넷 인터페이스 지정
     "-x NCCL_IB_GID_INDEX=3"         # RoCEv2 사용 시 GID 인덱스 (IB라면 불필요할 수 있음)
     "-x NCCL_IB_TIMEOUT=23"          # IB 재전송 타임아웃 (2^23 × 4.096μs ≈ 34초)
     "-x NCCL_IB_RETRY_CNT=7"         # IB 재전송 최대 횟수
     "-x NCCL_CROSS_NIC=1"            # 여러 NIC 간 교차 통신 허용
-    "-x NCCL_SOCKET_IFNAME=^lo,docker" # TCP 소켓에서 루프백/Docker 인터페이스 제외
     "-x NCCL_BUFFSIZE=8388608"       # 통신 버퍼 8MB (대용량 전송 최적화)
     "-x CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
     "-x LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:\${LD_LIBRARY_PATH:-}"
@@ -123,7 +138,7 @@ MPI_OPTS=(
     "--map-by ppr:${NUM_GPUS_PER_NODE}:node"
     "--bind-to none"
     "--allow-run-as-root"
-    "--mca btl_tcp_if_exclude lo,docker0"
+    "--mca btl_tcp_if_include ${NCCL_SOCKET_IFNAME}" # ★ MPI 통신 네트워크 역시 명시 지정된 이더넷으로 고정
     "--mca pml ob1"
     "--mca btl ^openib"               # UCX/IB 사용 시 btl openib 비활성
 )
