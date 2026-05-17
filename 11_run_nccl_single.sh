@@ -80,15 +80,19 @@ echo "  [Complete] Pre-verification passed"
 
 # 디버그 및 기본 설정
 export NCCL_DEBUG=INFO
-export NCCL_DEBUG_SUBSYS=INIT,GRAPH
+export NCCL_DEBUG_SUBSYS=INIT,GRAPH,ENV      # 디버깅 정보 대폭 확장 (INIT, ENV 확인)
 export NCCL_SOCKET_IFNAME=lo                 # 싱글노드 bootstrap — 루프백
 
-# 성능 & 안정성 (H200 레퍼런스 기반)
+# 성능 & 안정성 (Blackwell / NVSwitch 대응 최적화)
 export NCCL_SHARP_DISABLE=1                  # ★ 싱글노드에서 SHARP 비활성 (행 방지)
-export NCCL_NVLS_ENABLE=1                    # NVLink SHARP 활성화
+export NCCL_NVLS_ENABLE=0                    # ★ [중요] NVLink SHARP(NVLS) 비활성화 (Fabric Manager 호환성 및 단일노드 행 해결 1순위)
+export NCCL_IB_DISABLE=1                     # ★ [중요] 단일 노드 테스트에서 IB 카드 초기화 강제 방지 (행 방지 2순위)
 export NCCL_IGNORE_CPU_AFFINITY=1            # ★ CPU affinity 무시 (mpirun 호환)
 export NCCL_SHM_DISABLE=0                    # Shared Memory 활성화
 export NCCL_BUFFSIZE=8388608                 # 8MB 버퍼
+
+# P2P 진단용 (만약 하드웨어 NVLink 자체 의심 시, 아래 주석을 풀고 1로 켜서 SM으로만 도는지 점검)
+# export NCCL_P2P_DISABLE=0
 
 # MPI 설정 (btl 충돌 방지)
 export OMPI_MCA_btl=^openib                  # ★ openib btl 비활성 (UCX 사용)
@@ -96,14 +100,23 @@ export OMPI_MCA_btl=^openib                  # ★ openib btl 비활성 (UCX 사
 ###############################################################################
 # 실행 방식 결정
 ###############################################################################
-USE_MPI=false
-if command -v mpirun &>/dev/null; then
-    USE_MPI=true
-    echo ""
-    echo "  [MPI Mode] mpirun detected → ${NUM_GPUS} processes × 1 GPU each"
+# ★ 꿀팁: MPI 통신망이나 소켓 문제로 의심될 경우, 외부에서 `USE_MPI=false`를 주입하여
+#         단일 프로세스 멀티스레드 모드(Direct Mode)로 강제 우회 실행이 가능합니다.
+#         예: sudo -E USE_MPI=false bash 11_run_nccl_single.sh
+USE_MPI="${USE_MPI:-}"
+if [ -z "${USE_MPI}" ]; then
+    if command -v mpirun &>/dev/null; then
+        USE_MPI=true
+        echo ""
+        echo "  [MPI Mode] mpirun detected → ${NUM_GPUS} processes × 1 GPU each"
+    else
+        USE_MPI=false
+        echo ""
+        echo "  [Direct Mode] mpirun not found → single process × ${NUM_GPUS} GPUs"
+    fi
 else
     echo ""
-    echo "  [Direct Mode] mpirun not found → single process × ${NUM_GPUS} GPUs"
+    echo "  [Forced Mode] USE_MPI forced to ${USE_MPI}"
 fi
 
 # MPI 공통 옵션 (H200 레퍼런스 기반)

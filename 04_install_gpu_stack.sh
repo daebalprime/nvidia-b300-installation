@@ -65,7 +65,11 @@ export LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64:${LD_LIBRARY_PATH:-}
 # Step 6: 부가 패키지
 echo "[Step 6] Installing auxiliary packages..."
 sudo apt-get install -y libnccl2 libnccl-dev || true
-sudo apt-get install -y datacenter-gpu-manager-4-core || true
+sudo apt-get install -y \
+    datacenter-gpu-manager-4-core \
+    datacenter-gpu-manager-4-proprietary \
+    datacenter-gpu-manager-4-multinode \
+    datacenter-gpu-manager-4-multinode-cuda13 || true
 sudo apt-get install -y nvidia-gds-13-0 || true
 
 # Step 7: 서비스 활성화
