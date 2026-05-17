@@ -49,6 +49,19 @@ echo "options nvidia NVreg_OpenRmEnableUnsupportedGpus=1" | \
 echo "[Step 5] Installing CUDA Toolkit 13.0..."
 sudo apt-get install -y cuda-toolkit-13-0
 
+# Step 5.5: CUDA 환경변수 설정 (nvcc 전역 접근 필수)
+echo "[Step 5.5] Configuring CUDA environment (PATH + LD_LIBRARY_PATH)..."
+cat << 'CUDA_EOF' | sudo tee /etc/profile.d/cuda.sh > /dev/null
+export PATH=/usr/local/cuda-13.0/bin${PATH:+:${PATH}}
+export LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+CUDA_EOF
+sudo chmod +x /etc/profile.d/cuda.sh
+echo "/usr/local/cuda-13.0/lib64" | sudo tee /etc/ld.so.conf.d/cuda.conf > /dev/null
+sudo ldconfig
+# 현재 세션에도 즉시 적용
+export PATH=/usr/local/cuda-13.0/bin:${PATH}
+export LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64:${LD_LIBRARY_PATH:-}
+
 # Step 6: 부가 패키지
 echo "[Step 6] Installing auxiliary packages..."
 sudo apt-get install -y libnccl2 libnccl-dev || true
