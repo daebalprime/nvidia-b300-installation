@@ -55,41 +55,41 @@ fi
 NCCL_VERSION=$(dpkg -l libnccl2 2>/dev/null | grep libnccl2 | awk '{print $3}')
 echo "  NCCL Version: ${NCCL_VERSION}"
 
-# MPI 확인 (선택사항이지만 멀티노드에 필요)
-MPI_AVAILABLE=false
-MPI_FLAGS=""
-if command -v mpirun &>/dev/null; then
-    MPI_AVAILABLE=true
-    MPI_HOME="${MPI_HOME:-/usr}"
-    # HPC-X (DOCA-OFED에 포함) 또는 OpenMPI 경로 탐색
-    if [ -d "/opt/hpcx" ]; then
-        MPI_HOME="/opt/hpcx/ompi"
-        echo "  MPI: HPC-X found (${MPI_HOME})"
-    elif [ -d "/usr/local/mpi" ]; then
-        MPI_HOME="/usr/local/mpi"
-        echo "  MPI: OpenMPI (${MPI_HOME})"
-    else
-        echo "  MPI: System OpenMPI (${MPI_HOME})"
-    fi
-    MPI_FLAGS="MPI=1 MPI_HOME=${MPI_HOME}"
-else
-    echo "  [WARNING] MPI not found. Only single-node tests are possible."
-    echo "         To enable multi-node tests, install openmpi:"
-    echo "         apt-get install -y openmpi-bin libopenmpi-dev"
-fi
-
-# 빌드 필수 패키지 설치
+# ★ 빌드 필수 패키지 설치 (MPI 탐색보다 먼저!)
 echo "  → Installing build prerequisites..."
-sudo apt-get install -y git build-essential libopenmpi-dev
+sudo apt-get install -y git build-essential openmpi-bin libopenmpi-dev
 
 # nccl-tests 소스 다운로드 (없으면 자동 clone)
 if [ ! -d "${NCCL_TESTS_SRC}" ]; then
     echo "  → nccl-tests not found, cloning from GitHub..."
     sudo mkdir -p "$(dirname ${NCCL_TESTS_SRC})"
     sudo git clone https://github.com/NVIDIA/nccl-tests.git "${NCCL_TESTS_SRC}"
+    sudo chown -R $(id -u):$(id -g) "${NCCL_TESTS_SRC}"
 else
     echo "  → nccl-tests found, pulling latest..."
-    cd "${NCCL_TESTS_SRC}" && sudo git pull || true
+    cd "${NCCL_TESTS_SRC}" && git pull || true
+fi
+
+# MPI 경로 탐색 (패키지 설치 후 탐색해야 정확함)
+MPI_AVAILABLE=false
+MPI_FLAGS=""
+if command -v mpirun &>/dev/null; then
+    MPI_AVAILABLE=true
+    # Ubuntu 24.04: /usr/lib/x86_64-linux-gnu/openmpi
+    if [ -d "/opt/hpcx" ]; then
+        MPI_HOME="/opt/hpcx/ompi"
+        echo "  MPI: HPC-X found (${MPI_HOME})"
+    elif [ -d "/usr/lib/x86_64-linux-gnu/openmpi" ]; then
+        MPI_HOME="/usr/lib/x86_64-linux-gnu/openmpi"
+        echo "  MPI: System OpenMPI (${MPI_HOME})"
+    else
+        MPI_HOME="/usr"
+        echo "  MPI: Default path (${MPI_HOME})"
+    fi
+    MPI_FLAGS="MPI=1 MPI_HOME=${MPI_HOME}"
+    echo "  MPI mpi.h: $(find ${MPI_HOME} -name mpi.h 2>/dev/null | head -1)"
+else
+    echo "  [WARNING] MPI not found. Only single-node tests are possible."
 fi
 
 echo "  nccl-tests Source: ${NCCL_TESTS_SRC}"
