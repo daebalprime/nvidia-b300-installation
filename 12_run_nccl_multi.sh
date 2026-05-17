@@ -114,7 +114,7 @@ cat "${HOSTFILE}"
 NCCL_IB_HCA="${NCCL_IB_HCA:-mlx5_0,mlx5_10,mlx5_11,mlx5_14,mlx5_15,mlx5_5,mlx5_8,mlx5_9}"
 NCCL_SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-enp138s0f0np0}"
 
-# NCCL 환경 변수
+# NCCL 환경 변수 (Blackwell HGX 8-NDR Native IB 최적화)
 NCCL_ENV=(
     "-x NCCL_DEBUG=INFO"
     "-x NCCL_DEBUG_SUBSYS=INIT,NET"
@@ -122,7 +122,10 @@ NCCL_ENV=(
     "-x NCCL_NET_GDR_LEVEL=5"        # GPUDirect RDMA 레벨 5 (GPU↔NIC 직접 전송)
     "-x NCCL_IB_HCA=${NCCL_IB_HCA}"  # ★ [명시] 데이터 통신에 사용할 8개 NDR 인피니밴드 인터페이스 지정
     "-x NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME}" # ★ [명시] 핸드셰이크 및 TCP 부트스트랩용 이더넷 인터페이스 지정
-    "-x NCCL_IB_GID_INDEX=3"         # RoCEv2 사용 시 GID 인덱스 (IB라면 불필요할 수 있음)
+    # "-x NCCL_IB_GID_INDEX=3"       # ★ [제거] Native IB 모드에서는 GID Index 지정 시 RoCEv2 오인식 및 성능 급감 유발!
+    "-x NCCL_IB_PCI_RELAXED_ORDERING=1" # ★ [추가] CX7/CX8 성능 제한 해제 (PCIe Write 처리 속도 향상)
+    "-x NCCL_NET_GDR_READ=1"         # ★ [추가] GPUDirect RDMA 읽기 성능 가속
+    "-x NCCL_IB_SPLIT_THRESHOLD=0"   # ★ [추가] 대용량 AllReduce 시 메시지 분할 병목 제거
     "-x NCCL_IB_TIMEOUT=23"          # IB 재전송 타임아웃 (2^23 × 4.096μs ≈ 34초)
     "-x NCCL_IB_RETRY_CNT=7"         # IB 재전송 최대 횟수
     "-x NCCL_CROSS_NIC=1"            # 여러 NIC 간 교차 통신 허용
