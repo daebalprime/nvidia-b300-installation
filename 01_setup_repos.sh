@@ -18,12 +18,25 @@ echo "=============================================="
 ###############################################################################
 # Step 1: 기존 충돌 소스 정리
 ###############################################################################
-echo "[Step 1] Cleaning up old APT sources..."
+echo "[Step 1] Cleaning up ALL existing NVIDIA packages and APT sources..."
+
+# 1a. 설치된 nvidia/cuda 패키지 전체 제거 (버전 충돌 원천 차단)
+echo "  → Purging installed nvidia/cuda packages..."
+sudo apt-get purge -y "^nvidia-.*" "^libnvidia-.*" "^cuda-.*" "^libnccl.*" 2>/dev/null || true
+sudo apt-get autoremove -y 2>/dev/null || true
+
+# 1b. APT 소스 파일 정리
+echo "  → Removing old APT source files..."
 sudo rm -f /etc/apt/sources.list.d/nvidia-extra-local.list
 sudo rm -f /etc/apt/sources.list.d/nvidia-extra-local.list.bak
 sudo rm -f /etc/apt/sources.list.d/cuda-*-local*.list
 sudo rm -f /etc/apt/sources.list.d/nvidia-driver-local-repo-*.list
-sudo apt-get purge -y "cuda-repo-ubuntu2404-*" "nvidia-driver-local-repo-ubuntu2404-*" 2>/dev/null || true
+sudo rm -f /etc/apt/preferences.d/nvidia-*
+
+# 1c. APT 캐시 완전 초기화 (오염된 메타데이터 제거)
+echo "  → Flushing APT cache..."
+sudo rm -rf /var/lib/apt/lists/*
+sudo apt-get clean
 
 ###############################################################################
 # Step 2: 580.126.20 로컬 리포지토리 .deb 다운로드 및 설치
