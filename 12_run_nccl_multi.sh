@@ -148,7 +148,7 @@ MPI_OPTS=(
     "--hostfile ${HOSTFILE}"
     "-np ${TOTAL_GPUS}"
     "--map-by ppr:${NUM_GPUS_PER_NODE}:node"
-    "--bind-to none"
+    # "--bind-to none"
     "--allow-run-as-root"
     "--mca btl_tcp_if_include ${NCCL_SOCKET_IFNAME}" # ★ MPI 통신 네트워크 역시 명시 지정된 이더넷으로 고정
     "--mca pml ob1"
