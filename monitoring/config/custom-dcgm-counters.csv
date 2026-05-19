@@ -46,8 +46,11 @@ DCGM_FI_DEV_POWER_MGMT_LIMIT_MAX, gauge, Maximum power management limit (in W).
 DCGM_FI_DEV_SLOWDOWN_TEMP, gauge, Slowdown temperature threshold (in C).
 DCGM_FI_DEV_SHUTDOWN_TEMP, gauge, Shutdown temperature threshold (in C).
 
-# === NVLink 메트릭 (B300 NVLink5 모니터링 핵심) ===
 DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL, counter, Total NVLink bandwidth counter.
+DCGM_FI_DEV_NVLINK_CRC_FLIT_ERROR_COUNT_TOTAL, counter, Total NVLink flow-control digit CRC errors.
+DCGM_FI_DEV_NVLINK_CRC_DATA_ERROR_COUNT_TOTAL, counter, Total NVLink data payload CRC errors.
+DCGM_FI_DEV_NVLINK_REPLAY_ERROR_COUNT_TOTAL, counter, Total NVLink retry/replay errors.
+DCGM_FI_DEV_NVLINK_RECOVERY_ERROR_COUNT_TOTAL, counter, Total NVLink link recovery events.
 
 # === PCIe 상세 ===
 DCGM_FI_DEV_PCIE_MAX_LINK_GEN, gauge, PCIe max link generation.
@@ -74,8 +77,3 @@ DCGM_FI_PROF_NVLINK_RX_BYTES, counter, NVLink RX bytes (profiling).
 DCGM_FI_DEV_POWER_VIOLATION, counter, Power throttling duration (in us).
 DCGM_FI_DEV_THERMAL_VIOLATION, counter, Thermal throttling duration (in us).
 DCGM_FI_DEV_CLOCKS_EVENT_REASONS, gauge, Bitmask of all reasons for clock throttling.
-
-# === SM Stall 상세 분석 (확장성 병목 확인용) ===
-DCGM_FI_PROF_SM_STALL_REASONS, gauge, Ratio of time the SM is stalled for any reason.
-DCGM_FI_PROF_PIPE_TENSOR_QUOTA_STALL, gauge, Ratio of time the SM is stalled due to tensor core quota.
-DCGM_FI_PROF_MEM_DELAY_STALL, gauge, Ratio of time the SM is stalled waiting for memory.
