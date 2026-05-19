@@ -14,7 +14,7 @@ MONITORING_DIR="/opt/monitoring"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=============================================="
-21: echo " Monitoring Config Sync & Hot-Reload"
+echo " Monitoring Config Sync & Hot-Reload"
 echo "=============================================="
 
 # 1. 원본 파일 위치 확인
@@ -76,9 +76,9 @@ echo "[Step 3] Hot-reloading Docker Compose services (${NODE_ROLE})..."
 cd "${MONITORING_DIR}"
 
 if [ "${NODE_ROLE}" == "node1" ]; then
-    sudo docker compose up -d --recreate-deps
+    sudo docker compose up -d --force-recreate
 else
-    sudo docker compose -f docker-compose.node2.yml up -d --recreate-deps
+    sudo docker compose -f docker-compose.node2.yml up -d --force-recreate
 fi
 
 echo "=============================================="
