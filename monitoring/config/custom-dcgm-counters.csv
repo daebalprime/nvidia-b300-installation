@@ -69,7 +69,6 @@ DCGM_FI_PROF_PCIE_TX_BYTES, counter, PCIe TX bytes (profiling).
 DCGM_FI_PROF_PCIE_RX_BYTES, counter, PCIe RX bytes (profiling).
 DCGM_FI_PROF_NVLINK_TX_BYTES, counter, NVLink TX bytes (profiling).
 DCGM_FI_PROF_NVLINK_RX_BYTES, counter, NVLink RX bytes (profiling).
-DCGM_FI_PROF_FB_BW_UTIL, gauge, Framebuffer (HBM) bandwidth utilization.
 
 # === 바이올레이션 카운터 (스로틀링 원인 추적) ===
 DCGM_FI_DEV_POWER_VIOLATION, counter, Power throttling duration (in us).
