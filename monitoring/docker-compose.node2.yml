@@ -25,8 +25,7 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    cap_add:
-      - SYS_ADMIN
+    privileged: true
     networks:
       - monitoring
 
@@ -64,6 +63,7 @@ services:
       - /sys:/host/sys:ro
       - /:/rootfs:ro
       - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
+      - /run/udev:/run/udev:ro
     command:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'

@@ -10,6 +10,7 @@ services:
   prometheus:
     image: prom/prometheus:v3.4.0
     container_name: prometheus
+    user: "root"
     restart: unless-stopped
     ports:
       - "9090:9090"
@@ -46,8 +47,7 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    cap_add:
-      - SYS_ADMIN
+    privileged: true
     networks:
       - monitoring
 
@@ -87,6 +87,7 @@ services:
       - /sys:/host/sys:ro
       - /:/rootfs:ro
       - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
+      - /run/udev:/run/udev:ro
     command:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'
