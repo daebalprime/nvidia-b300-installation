@@ -58,6 +58,7 @@ services:
   ipmi-exporter:
     image: prometheuscommunity/ipmi-exporter:latest
     container_name: ipmi-exporter
+    user: "root"
     restart: unless-stopped
     ports:
       - "9290:9290"
@@ -94,7 +95,6 @@ services:
       - '--path.rootfs=/rootfs'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
       # === 추가 활성화 collector ===
-      - '--collector.processes'          # 프로세스 상태 상세
       - '--collector.systemd'            # systemd 서비스 상태
       - '--collector.interrupts'         # 인터럽트 카운터
       - '--collector.tcpstat'            # TCP 연결 상태

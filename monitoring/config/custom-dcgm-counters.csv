@@ -38,7 +38,7 @@ DCGM_FI_DEV_RETIRED_PENDING, gauge, Whether any pages are pending retirement.
 DCGM_FI_DEV_XID_ERRORS, gauge, Last XID error value.
 
 # === 클럭 스로틀링 ===
-DCGM_FI_DEV_CLOCK_THROTTLE_REASONS, gauge, Current clock throttle reasons (bitmask).
+DCGM_FI_DEV_CLOCKS_EVENT_REASONS, gauge, Current clock throttle reasons (bitmask).
 
 # === 전원 / 온도 한계 ===
 DCGM_FI_DEV_POWER_MGMT_LIMIT, gauge, Power management limit (in W).
@@ -74,7 +74,7 @@ DCGM_FI_PROF_FB_BW_UTIL, gauge, Framebuffer (HBM) bandwidth utilization.
 # === 바이올레이션 카운터 (스로틀링 원인 추적) ===
 DCGM_FI_DEV_POWER_VIOLATION, counter, Power throttling duration (in us).
 DCGM_FI_DEV_THERMAL_VIOLATION, counter, Thermal throttling duration (in us).
-DCGM_FI_DEV_CLOCK_THROTTLE_REASONS, gauge, Bitmask of all reasons for clock throttling.
+DCGM_FI_DEV_CLOCKS_EVENT_REASONS, gauge, Bitmask of all reasons for clock throttling.
 
 # === SM Stall 상세 분석 (확장성 병목 확인용) ===
 DCGM_FI_PROF_SM_STALL_REASONS, gauge, Ratio of time the SM is stalled for any reason.
