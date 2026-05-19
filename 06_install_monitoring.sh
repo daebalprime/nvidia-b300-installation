@@ -42,7 +42,7 @@ echo "[Step 3] Preparing directories..."
 sudo mkdir -p ${MONITORING_DIR}/{prometheus-data,config}
 
 # 파일 찾기 (여러 후보 경로 탐색)
-SEARCH_PATHS=("${SCRIPT_DIR}" "${SCRIPT_DIR}/.." "${SCRIPT_DIR}/../monitoring" "${SCRIPT_DIR}/monitoring")
+SEARCH_PATHS=("${SCRIPT_DIR}/monitoring" "${SCRIPT_DIR}" "${SCRIPT_DIR}/.." "${SCRIPT_DIR}/../monitoring")
 FOUND_SRC=""
 
 for P in "${SEARCH_PATHS[@]}"; do
@@ -82,6 +82,8 @@ fi
 echo "[Step 5] Verification..."
 sleep 5
 curl -sf http://localhost:9400/metrics | head -n 1 && echo "  [PASS] DCGM Exporter is running" || echo "  [FAIL] DCGM Exporter check failed"
+curl -sf http://localhost:9100/metrics | head -n 1 && echo "  [PASS] Node Exporter is running" || echo "  [FAIL] Node Exporter check failed"
+curl -sf http://localhost:9290/metrics | head -n 1 && echo "  [PASS] IPMI Exporter is running" || echo "  [FAIL] IPMI Exporter check failed"
 
 echo "=============================================="
 echo " Monitoring installation complete! (${NODE_ROLE})"

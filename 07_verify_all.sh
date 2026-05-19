@@ -69,6 +69,7 @@ echo ""
 echo "[6] Monitoring Exporters"
 curl -sf http://localhost:9400/metrics | head -n 1 && echo "  [PASS] DCGM Exporter" || echo "  [FAIL] DCGM Exporter"
 curl -sf http://localhost:9100/metrics | head -n 1 && echo "  [PASS] Node Exporter" || echo "  [FAIL] Node Exporter"
+curl -sf http://localhost:9290/metrics | head -n 1 && echo "  [PASS] IPMI Exporter" || echo "  [FAIL] IPMI Exporter"
 
 echo ""
 echo "=============================================="

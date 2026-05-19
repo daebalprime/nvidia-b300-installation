@@ -1,0 +1,12 @@
+# IPMI Exporter 설정 파일 (최대 수집 모드)
+# 모든 가용 collector를 활성화합니다.
+
+modules:
+  default:
+    # 모든 collector 활성화
+    collectors:
+      - ipmi        # 모든 IPMI 센서 (온도, 전압, 팬 속도, 전류 등)
+      - dcmi        # Data Center Manageability Interface (시스템 전체 전력 소비)
+      - bmc         # BMC 펌웨어 정보, 상태
+      - chassis     # 섀시 상태 (전원, 드라이브 결함, 침입 감지)
+      - sel         # System Event Log (하드웨어 이벤트/에러 이력)

@@ -1,22 +1,44 @@
+# HGX B300 PoC 모니터링 스택 (최대 수집 모드)
+# Docker Compose로 Prometheus + Exporters 실행
+
 version: '3.8'
 
 services:
+  # ============================================================
+  # Prometheus - 메트릭 수집/저장 서버
+  # ============================================================
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.4.0
     container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
     volumes:
-      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./prometheus-data:/prometheus
+      - /opt/monitoring/config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /opt/monitoring/prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-    ports:
-      - "9090:9090"
-    restart: always
+      - '--storage.tsdb.retention.time=90d'
+      - '--web.enable-admin-api'
+      - '--web.enable-lifecycle'
+    networks:
+      - monitoring
 
+  # ============================================================
+  # DCGM Exporter - GPU 메트릭 (최대 수집 모드)
+  # 커스텀 CSV로 DCP 프로파일링 + NVLink + ECC 등 전체 수집
+  # ============================================================
   dcgm-exporter:
-    image: nvidia/dcgm-exporter:latest
+    image: nvcr.io/nvidia/k8s/dcgm-exporter:4.5.2-4.8.1-ubuntu22.04
     container_name: dcgm-exporter
+    restart: unless-stopped
+    ports:
+      - "9400:9400"
+    volumes:
+      - /opt/monitoring/config/custom-dcgm-counters.csv:/etc/dcgm-exporter/customized.csv:ro
+    environment:
+      - DCGM_EXPORTER_COLLECTORS=/etc/dcgm-exporter/customized.csv
     deploy:
       resources:
         reservations:
@@ -24,21 +46,64 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    ports:
-      - "9400:9400"
-    restart: always
+    cap_add:
+      - SYS_ADMIN
+    networks:
+      - monitoring
 
+  # ============================================================
+  # IPMI Exporter - 서버 하드웨어 메트릭 (전체 collector 활성화)
+  # ipmi + dcmi + bmc + chassis + sel 모든 collector 수집
+  # ============================================================
+  ipmi-exporter:
+    image: prometheuscommunity/ipmi-exporter:latest
+    container_name: ipmi-exporter
+    restart: unless-stopped
+    ports:
+      - "9290:9290"
+    volumes:
+      - /opt/monitoring/config/ipmi-exporter-config.yml:/etc/ipmi-exporter/config.yml:ro
+    command:
+      - '--config.file=/etc/ipmi-exporter/config.yml'
+      - '--freeipmi.path=/usr/sbin'
+    privileged: true
+    devices:
+      - /dev/ipmi0:/dev/ipmi0
+    networks:
+      - monitoring
+
+  # ============================================================
+  # Node Exporter - OS 메트릭 (추가 collector 활성화)
+  # 기본 collector + perf + processes + systemd 등 추가
+  # ============================================================
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro
+      - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
     command:
       - '--path.procfs=/host/proc'
-      - '--path.rootfs=/rootfs'
       - '--path.sysfs=/host/sys'
-    ports:
-      - "9100:9100"
-    restart: always
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      # === 추가 활성화 collector ===
+      - '--collector.processes'          # 프로세스 상태 상세
+      - '--collector.systemd'            # systemd 서비스 상태
+      - '--collector.interrupts'         # 인터럽트 카운터
+      - '--collector.tcpstat'            # TCP 연결 상태
+      - '--collector.buddyinfo'          # 메모리 조각화
+      - '--collector.meminfo_numa'       # NUMA 노드별 메모리
+      # infiniband collector는 기본 활성화됨
+    pid: host
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    driver: bridge

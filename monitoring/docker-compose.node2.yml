@@ -1,9 +1,23 @@
+# HGX B300 PoC - Node 2 전용 (Exporter만 실행)
+# Prometheus는 Node 1에서만 실행하고, Node 2는 Exporter만 실행합니다.
+# Node 1의 Prometheus가 Node 2의 Exporter를 원격 스크래핑합니다.
+
 version: '3.8'
 
 services:
+  # ============================================================
+  # DCGM Exporter - GPU 메트릭
+  # ============================================================
   dcgm-exporter:
-    image: nvidia/dcgm-exporter:latest
+    image: nvcr.io/nvidia/k8s/dcgm-exporter:4.5.2-4.8.1-ubuntu22.04
     container_name: dcgm-exporter
+    restart: unless-stopped
+    ports:
+      - "9400:9400"
+    volumes:
+      - /opt/monitoring/config/custom-dcgm-counters.csv:/etc/dcgm-exporter/customized.csv:ro
+    environment:
+      - DCGM_EXPORTER_COLLECTORS=/etc/dcgm-exporter/customized.csv
     deploy:
       resources:
         reservations:
@@ -11,21 +25,61 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    ports:
-      - "9400:9400"
-    restart: always
+    cap_add:
+      - SYS_ADMIN
+    networks:
+      - monitoring
 
+  # ============================================================
+  # IPMI Exporter - 서버 하드웨어 메트릭
+  # ============================================================
+  ipmi-exporter:
+    image: prometheuscommunity/ipmi-exporter:latest
+    container_name: ipmi-exporter
+    restart: unless-stopped
+    ports:
+      - "9290:9290"
+    volumes:
+      - /opt/monitoring/config/ipmi-exporter-config.yml:/etc/ipmi-exporter/config.yml:ro
+    command:
+      - '--config.file=/etc/ipmi-exporter/config.yml'
+      - '--freeipmi.path=/usr/sbin'
+    privileged: true
+    devices:
+      - /dev/ipmi0:/dev/ipmi0
+    networks:
+      - monitoring
+
+  # ============================================================
+  # Node Exporter - OS 메트릭
+  # ============================================================
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro
+      - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
     command:
       - '--path.procfs=/host/proc'
-      - '--path.rootfs=/rootfs'
       - '--path.sysfs=/host/sys'
-    ports:
-      - "9100:9100"
-    restart: always
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      # === 추가 활성화 collector ===
+      - '--collector.processes'          # 프로세스 상태 상세
+      - '--collector.systemd'            # systemd 서비스 상태
+      - '--collector.interrupts'         # 인터럽트 카운터
+      - '--collector.tcpstat'            # TCP 연결 상태
+      - '--collector.buddyinfo'          # 메모리 조각화
+      - '--collector.meminfo_numa'       # NUMA 노드별 메모리
+    pid: host
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    driver: bridge
