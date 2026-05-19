@@ -102,6 +102,7 @@ services:
       - '--collector.meminfo_numa'       # NUMA 노드별 메모리
       # infiniband collector는 기본 활성화됨
     pid: host
+    privileged: true
     networks:
       - monitoring
 
