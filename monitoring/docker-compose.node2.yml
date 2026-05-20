@@ -80,6 +80,7 @@ services:
       - '--collector.tcpstat'            # TCP 연결 상태
       - '--collector.buddyinfo'          # 메모리 조각화
       - '--collector.meminfo_numa'       # NUMA 노드별 메모리
+      - '--no-collector.mdadm'           # mdadm RAID 수집 제외 (strconv.ParseUint 파싱 에러 방지)
     pid: host
     privileged: true
     networks:
