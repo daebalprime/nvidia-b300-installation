@@ -18,7 +18,7 @@ IMAGES=(
     "prometheuscommunity/ipmi-exporter:latest"
     "prom/node-exporter:latest"
     "prom/prometheus:v3.4.0"
-    "nvidia/dcgm-exporter:latest"
+    "nvcr.io/nvidia/k8s/dcgm-exporter:4.5.2-4.8.1-ubuntu22.04"
     "nvidia/cuda:13.0.2-base-ubuntu24.04"
 )
 

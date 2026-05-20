@@ -9,7 +9,8 @@ services:
   # DCGM Exporter - GPU 메트릭
   # ============================================================
   dcgm-exporter:
-    image: nvidia/dcgm-exporter:latest
+    image: nvcr.io/nvidia/k8s/dcgm-exporter:4.5.2-4.8.1-ubuntu22.04
+    pull_policy: never
     container_name: dcgm-exporter
     restart: unless-stopped
     ports:
@@ -34,6 +35,7 @@ services:
   # ============================================================
   ipmi-exporter:
     image: prometheuscommunity/ipmi-exporter:latest
+    pull_policy: never
     container_name: ipmi-exporter
     user: "root"
     restart: unless-stopped
@@ -55,6 +57,7 @@ services:
   # ============================================================
   node-exporter:
     image: prom/node-exporter:latest
+    pull_policy: never
     container_name: node-exporter
     user: "root"
     restart: unless-stopped
