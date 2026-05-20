@@ -76,4 +76,4 @@ DCGM_FI_PROF_NVLINK_RX_BYTES, counter, NVLink RX bytes (profiling).
 # === 바이올레이션 카운터 (스로틀링 원인 추적) ===
 DCGM_FI_DEV_POWER_VIOLATION, counter, Power throttling duration (in us).
 DCGM_FI_DEV_THERMAL_VIOLATION, counter, Thermal throttling duration (in us).
-DCGM_FI_DEV_CLOCKS_EVENT_REASONS, gauge, Bitmask of all reasons for clock throttling.
+
