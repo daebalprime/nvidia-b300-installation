@@ -9,7 +9,7 @@ services:
   # DCGM Exporter - GPU 메트릭
   # ============================================================
   dcgm-exporter:
-    image: nvcr.io/nvidia/k8s/dcgm-exporter:4.5.2-4.8.1-ubuntu22.04
+    image: nvidia/dcgm-exporter:latest
     container_name: dcgm-exporter
     restart: unless-stopped
     ports:
