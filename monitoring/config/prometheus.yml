@@ -19,7 +19,7 @@ scrape_configs:
   # ============================================================
   - job_name: "node-exporter"
     static_configs:
-      - targets: ["localhost:9100"]
+      - targets: ["node-exporter:9100"]
         labels:
           instance: "hgx-node1"
       - targets: ["hgx-node2:9100"]
@@ -32,7 +32,7 @@ scrape_configs:
   - job_name: "dcgm-exporter"
     scrape_interval: 5s    # GPU 메트릭은 더 자주 수집
     static_configs:
-      - targets: ["localhost:9400"]
+      - targets: ["dcgm-exporter:9400"]
         labels:
           instance: "hgx-node1"
       - targets: ["hgx-node2:9400"]
@@ -48,7 +48,7 @@ scrape_configs:
     params:
       module: ["default"]
     static_configs:
-      - targets: ["localhost:9290"]
+      - targets: ["ipmi-exporter:9290"]
         labels:
           instance: "hgx-node1"
       - targets: ["hgx-node2:9290"]
@@ -57,4 +57,5 @@ scrape_configs:
     relabel_configs:
       - target_label: __param_target
         replacement: "127.0.0.1"
+
 

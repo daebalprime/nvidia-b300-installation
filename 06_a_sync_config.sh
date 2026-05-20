@@ -68,7 +68,7 @@ sudo cp "${FOUND_SRC}"/docker-compose*.yml "${MONITORING_DIR}/"
 # 4. 추출한 기존 IP 자동 재적용 (Node 1인 경우)
 if [ "${NODE_ROLE}" == "node1" ] && [ -n "${EXISTING_IP}" ]; then
     echo "[Step 2] Restoring existing Node 2 IP target (${EXISTING_IP}) to prometheus.yml..."
-    sudo sed -i "s/hgx-node2/${EXISTING_IP}/g" "${MONITORING_DIR}/config/prometheus.yml"
+    sudo sed -i "s/hgx-node2:/${EXISTING_IP}:/g" "${MONITORING_DIR}/config/prometheus.yml"
 fi
 
 # 5. 무중단 핫리로드 재생성 실행

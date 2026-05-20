@@ -46,19 +46,19 @@ format_bytes_to_gb() {
 echo -e "\n${CYAN}[1/3] OS METRICS (Node Exporter - Port 9100)${NC}"
 if curl -sf -m 3 http://localhost:9100/metrics > /tmp/node_metrics.tmp 2>/dev/null; then
     # Load Average
-    LOAD1=$(grep -E '^node_load1 ' /tmp/node_metrics.tmp | awk '{print $2}')
-    LOAD5=$(grep -E '^node_load5 ' /tmp/node_metrics.tmp | awk '{print $2}')
-    LOAD15=$(grep -E '^node_load15 ' /tmp/node_metrics.tmp | awk '{print $2}')
+    LOAD1=$(grep -E '^node_load1 ' /tmp/node_metrics.tmp | awk '{print $NF}')
+    LOAD5=$(grep -E '^node_load5 ' /tmp/node_metrics.tmp | awk '{print $NF}')
+    LOAD15=$(grep -E '^node_load15 ' /tmp/node_metrics.tmp | awk '{print $NF}')
     
     # Memory Info
-    MEM_TOTAL=$(grep -E '^node_memory_MemTotal_bytes ' /tmp/node_metrics.tmp | awk '{print $2}')
-    MEM_AVAIL=$(grep -E '^node_memory_MemAvailable_bytes ' /tmp/node_metrics.tmp | awk '{print $2}')
+    MEM_TOTAL=$(grep -E '^node_memory_MemTotal_bytes ' /tmp/node_metrics.tmp | awk '{print $NF}')
+    MEM_AVAIL=$(grep -E '^node_memory_MemAvailable_bytes ' /tmp/node_metrics.tmp | awk '{print $NF}')
     MEM_USED=$(echo | awk -v t="$MEM_TOTAL" -v a="$MEM_AVAIL" '{print t - a}')
     MEM_PERC=$(echo | awk -v u="$MEM_USED" -v t="$MEM_TOTAL" '{printf "%.1f", (u / t) * 100}')
     
     # Disk Usage (Root filesystem /)
-    DISK_SIZE=$(grep -E '^node_filesystem_size_bytes\{device=.*,fstype=.*,mountpoint="/"\}' /tmp/node_metrics.tmp | awk '{print $2}')
-    DISK_FREE=$(grep -E '^node_filesystem_free_bytes\{device=.*,fstype=.*,mountpoint="/"\}' /tmp/node_metrics.tmp | awk '{print $2}')
+    DISK_SIZE=$(grep -E '^node_filesystem_size_bytes\{device=.*,fstype=.*,mountpoint="/"\}' /tmp/node_metrics.tmp | awk '{print $NF}')
+    DISK_FREE=$(grep -E '^node_filesystem_free_bytes\{device=.*,fstype=.*,mountpoint="/"\}' /tmp/node_metrics.tmp | awk '{print $NF}')
     if [ -n "${DISK_SIZE}" ] && [ -n "${DISK_FREE}" ]; then
         DISK_USED=$(echo | awk -v s="$DISK_SIZE" -v f="$DISK_FREE" '{print s - f}')
         DISK_PERC=$(echo | awk -v u="$DISK_USED" -v s="$DISK_SIZE" '{printf "%.1f", (u / s) * 100}')
@@ -109,11 +109,11 @@ if curl -sf -m 3 http://localhost:9400/metrics > /tmp/dcgm_metrics.tmp 2>/dev/nu
             [ -z "${UUID}" ] && UUID="N/A"
             
             # 메트릭들 파싱
-            TEMP=$(grep -E "^DCGM_FI_DEV_GPU_TEMP\{.*gpu=\"$G\".*\}" /tmp/dcgm_metrics.tmp | awk '{print $2}')
-            POWER=$(grep -E "^DCGM_FI_DEV_POWER_USAGE\{.*gpu=\"$G\".*\}" /tmp/dcgm_metrics.tmp | awk '{print $2}')
-            FB_USED=$(grep -E "^DCGM_FI_DEV_FB_USED\{.*gpu=\"$G\".*\}" /tmp/dcgm_metrics.tmp | awk '{print $2}')
-            FB_TOTAL=$(grep -E "^DCGM_FI_DEV_FB_TOTAL\{.*gpu=\"$G\".*\}" /tmp/dcgm_metrics.tmp | awk '{print $2}')
-            UTIL=$(grep -E "^DCGM_FI_DEV_GPU_UTIL\{.*gpu=\"$G\".*\}" /tmp/dcgm_metrics.tmp | awk '{print $2}')
+            TEMP=$(grep -E "^DCGM_FI_DEV_GPU_TEMP\{.*gpu=\"$G\".*\}" /tmp/dcgm_metrics.tmp | awk '{print $NF}')
+            POWER=$(grep -E "^DCGM_FI_DEV_POWER_USAGE\{.*gpu=\"$G\".*\}" /tmp/dcgm_metrics.tmp | awk '{print $NF}')
+            FB_USED=$(grep -E "^DCGM_FI_DEV_FB_USED\{.*gpu=\"$G\".*\}" /tmp/dcgm_metrics.tmp | awk '{print $NF}')
+            FB_TOTAL=$(grep -E "^DCGM_FI_DEV_FB_TOTAL\{.*gpu=\"$G\".*\}" /tmp/dcgm_metrics.tmp | awk '{print $NF}')
+            UTIL=$(grep -E "^DCGM_FI_DEV_GPU_UTIL\{.*gpu=\"$G\".*\}" /tmp/dcgm_metrics.tmp | awk '{print $NF}')
             
             # 기본값 보정
             [ -z "${TEMP}" ] && TEMP="N/A" || TEMP="${TEMP}°C"
@@ -130,8 +130,8 @@ if curl -sf -m 3 http://localhost:9400/metrics > /tmp/dcgm_metrics.tmp 2>/dev/nu
         echo -e "  +-----+-------------------------+-------------+-------------+------------------+-----------------+"
         
         # NVLink 에러 유무 진단
-        CRC_ERRS=$(grep -E '^DCGM_FI_DEV_NVLINK_CRC_DATA_ERROR_COUNT_TOTAL' /tmp/dcgm_metrics.tmp | awk '{sum+=$2} END {print sum}' || true)
-        REPLAY_ERRS=$(grep -E '^DCGM_FI_DEV_NVLINK_REPLAY_ERROR_COUNT_TOTAL' /tmp/dcgm_metrics.tmp | awk '{sum+=$2} END {print sum}' || true)
+        CRC_ERRS=$(grep -E '^DCGM_FI_DEV_NVLINK_CRC_DATA_ERROR_COUNT_TOTAL' /tmp/dcgm_metrics.tmp | awk '{sum+=$NF} END {print sum}' || true)
+        REPLAY_ERRS=$(grep -E '^DCGM_FI_DEV_NVLINK_REPLAY_ERROR_COUNT_TOTAL' /tmp/dcgm_metrics.tmp | awk '{sum+=$NF} END {print sum}' || true)
         
         if [ -n "${CRC_ERRS}" ] && [ "${CRC_ERRS}" != "0" ]; then
             echo -e "  - ${RED}[ALERT] NVLink Data CRC Errors detected: ${CRC_ERRS}${NC}"
@@ -157,7 +157,7 @@ if curl -sf -m 5 "http://localhost:9290/ipmi?module=default&target=127.0.0.1" > 
     if [ -n "${SYS_POWER}" ]; then
         echo "${SYS_POWER}" | while read -r line; do
             NAME=$(echo "$line" | sed 's/.*name="//;s/".*//')
-            VAL=$(echo "$line" | awk '{print $2}')
+            VAL=$(echo "$line" | awk '{print $NF}')
             echo -e "    - ${GREEN}${NAME}${NC} : ${YELLOW}${VAL} W${NC}"
         done
     else
@@ -170,7 +170,7 @@ if curl -sf -m 5 "http://localhost:9290/ipmi?module=default&target=127.0.0.1" > 
         echo -e "    - ${GREEN}System Fans (Top 4)${NC} :"
         echo "${FAN_SENSORS}" | while read -r line; do
             NAME=$(echo "$line" | sed 's/.*name="//;s/".*//')
-            VAL=$(echo "$line" | awk '{print $2}')
+            VAL=$(echo "$line" | awk '{print $NF}')
             echo -e "      * ${NAME} : ${YELLOW}${VAL} RPM${NC}"
         done
     else
@@ -178,7 +178,7 @@ if curl -sf -m 5 "http://localhost:9290/ipmi?module=default&target=127.0.0.1" > 
     fi
     
     # 3. 섀시 전반적인 위기 플래그 감지
-    CRIT_FLAGS=$(grep -iE '^ipmi_sensor_state\{.*state="critical"\}' /tmp/ipmi_metrics.tmp | awk '{sum+=$2} END {print sum}' || true)
+    CRIT_FLAGS=$(grep -iE '^ipmi_sensor_state\{.*state="critical"\}' /tmp/ipmi_metrics.tmp | awk '{sum+=$NF} END {print sum}' || true)
     if [ -n "${CRIT_FLAGS}" ] && [ "${CRIT_FLAGS}" != "0" ] && [ "${CRIT_FLAGS}" != "NaN" ]; then
         echo -e "    - ${RED}[WARNING] IPMI detected ${CRIT_FLAGS} critical hardware state alarms!${NC}"
     else

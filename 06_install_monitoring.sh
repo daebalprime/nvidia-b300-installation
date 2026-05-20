@@ -71,7 +71,7 @@ if [ "${NODE_ROLE}" == "node1" ]; then
     read -p "  Enter Node 2's IP address: " NODE2_IP
     # Prometheus 설정 파일 수정
     if [ -f "config/prometheus.yml" ]; then
-        sudo sed -i "s/hgx-node2/${NODE2_IP}/g" config/prometheus.yml
+        sudo sed -i "s/hgx-node2:/${NODE2_IP}:/g" config/prometheus.yml
     fi
     sudo docker compose up -d
 else
