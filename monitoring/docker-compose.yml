@@ -127,7 +127,7 @@ services:
   # Grafana - 메트릭 시각화
   # ============================================================
   grafana:
-    image: grafana/grafana:11.5.0
+    image: grafana/grafana
     pull_policy: never
     container_name: grafana
     user: "root"
