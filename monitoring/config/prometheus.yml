@@ -21,7 +21,7 @@ scrape_configs:
     scrape_interval: 15s   # IPMI는 30초 간격
     scrape_timeout: 14s
     static_configs:
-      - targets: ["node-exporter:9100"]
+      - targets: ["localhost:9100"]
         labels:
           instance: "hgx-node1"
       - targets: ["hgx-node2:9100"]
@@ -37,7 +37,7 @@ scrape_configs:
     scrape_interval: 15s
     scrape_timeout: 14s
     static_configs:
-      - targets: ["dcgm-exporter:9400"]
+      - targets: ["localhost:9400"]
         labels:
           instance: "hgx-node1"
       - targets: ["hgx-node2:9400"]
@@ -55,7 +55,7 @@ scrape_configs:
     params:
       module: ["default"]
     static_configs:
-      - targets: ["ipmi-exporter:9290"]
+      - targets: ["localhost:9290"]
         labels:
           instance: "hgx-node1"
       - targets: ["hgx-node2:9290"]

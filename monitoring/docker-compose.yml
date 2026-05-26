@@ -13,8 +13,7 @@ services:
     container_name: prometheus
     user: "root"
     restart: unless-stopped
-    ports:
-      - "9090:9090"
+    network_mode: host
     volumes:
       - /opt/monitoring/config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - /opt/monitoring/prometheus-data:/prometheus
@@ -27,8 +26,6 @@ services:
       - '--storage.tsdb.retention.time=90d'
       - '--web.enable-admin-api'
       - '--web.enable-lifecycle'
-    networks:
-      - monitoring
 
   # ============================================================
   # DCGM Exporter - GPU 메트릭 (최대 수집 모드)
@@ -134,6 +131,8 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - /opt/monitoring/config/grafana-datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
       - /opt/monitoring/grafana-data:/var/lib/grafana
