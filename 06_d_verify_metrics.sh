@@ -153,7 +153,7 @@ if curl -sf -m 5 "http://localhost:9290/ipmi?module=default&target=127.0.0.1" > 
     echo -e "  ${YELLOW}System IPMI Sensors Status:${NC}"
     
     # 1. 시스템 총 전력 소비 (DCMI 메트릭 우선 검색)
-    SYS_POWER=$(grep -iE '^ipmi_sensor_value\{.*name=".*Power.*"\}' /tmp/ipmi_metrics.tmp | grep -iE 'watts|w' | head -n 2 || true)
+    SYS_POWER=$(grep -iE '^ipmi_sensor_value\{.*name=".*Power.*"\}' /tmp/ipmi_metrics.tmp | grep -iE 'watts|w' | grep -v 'NaN' | head -n 2 || true)
     if [ -n "${SYS_POWER}" ]; then
         echo "${SYS_POWER}" | while read -r line; do
             NAME=$(echo "$line" | sed 's/.*name="//;s/".*//')
@@ -165,7 +165,7 @@ if curl -sf -m 5 "http://localhost:9290/ipmi?module=default&target=127.0.0.1" > 
     fi
     
     # 2. 메인 팬 속도 (RPM 리스트 요약)
-    FAN_SENSORS=$(grep -iE '^ipmi_sensor_value\{.*name=".*Fan.*"\}' /tmp/ipmi_metrics.tmp | head -n 4 || true)
+    FAN_SENSORS=$(grep -iE '^ipmi_sensor_value\{.*name=".*Fan.*"\}' /tmp/ipmi_metrics.tmp | grep -v 'NaN' | head -n 4 || true)
     if [ -n "${FAN_SENSORS}" ]; then
         echo -e "    - ${GREEN}System Fans (Top 4)${NC} :"
         echo "${FAN_SENSORS}" | while read -r line; do

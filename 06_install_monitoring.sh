@@ -46,6 +46,7 @@ sudo apt-get install -y freeipmi-tools ipmitool
 echo "[Step 3] Preparing directories..."
 sudo mkdir -p ${MONITORING_DIR}/{prometheus-data,grafana-data,config}
 sudo chown -R ${USER}:${USER} ${MONITORING_DIR}
+sudo chown -R 65534:65534 ${MONITORING_DIR}/prometheus-data
 
 # 파일 찾기 (여러 후보 경로 탐색)
 SEARCH_PATHS=("${SCRIPT_DIR}/monitoring" "${SCRIPT_DIR}" "${SCRIPT_DIR}/.." "${SCRIPT_DIR}/../monitoring")
