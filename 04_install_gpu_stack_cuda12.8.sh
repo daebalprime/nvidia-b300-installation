@@ -1,14 +1,14 @@
 #!/bin/bash
 ###############################################################################
-# 04_install_gpu_stack.sh
-# Driver 580.126.20 (로컬 Repo + Pin 기반) + CUDA 13.0 + Blackwell 스택
+# 04_install_gpu_stack_cuda12.8.sh
+# Driver 580.126.20 (로컬 Repo + Pin 기반) + CUDA 12.8 + Blackwell 스택
 # 사전 조건: 01_setup_repos.sh 실행 완료
 ###############################################################################
 set -euo pipefail
 
 echo "=============================================="
 echo " GPU Stack Installation (Version-Locked)"
-echo " Driver: 580.126.20 | CUDA: 13.0"
+echo " Driver: 580.126.20 | CUDA: 12.8 (Pyenv 최적화)"
 echo "=============================================="
 
 # GPU 아키텍처 선택 (환경 변수 또는 대화형)
@@ -27,6 +27,7 @@ if [ -z "${GPU_ARCH}" ]; then
     fi
 fi
 echo "Using GPU Architecture: ${GPU_ARCH}"
+
 # 사전 검증: APT Pin 파일
 if [ ! -f /etc/apt/preferences.d/nvidia-580-pin ]; then
     echo "[ERROR] APT Pin file not found!"
@@ -93,22 +94,25 @@ fi
 echo "options nvidia NVreg_OpenRmEnableUnsupportedGpus=1" | \
     sudo tee /etc/modprobe.d/nvidia-open.conf > /dev/null
 
-# Step 5: CUDA Toolkit 13.0
-echo "[Step 5] Installing CUDA Toolkit 13.0..."
-sudo apt-get install -y cuda-toolkit-13-0
+# Step 5: CUDA Toolkit 12.8
+echo "[Step 5] Installing CUDA Toolkit 12.8..."
+sudo apt-get install -y cuda-toolkit-12-8
 
-# Step 5.5: CUDA 환경변수 설정 (nvcc 전역 접근 필수)
+# Step 5.5: CUDA 환경변수 설정 (nvcc 전역 접근 및 Pyenv/Host 연동)
 echo "[Step 5.5] Configuring CUDA environment (PATH + LD_LIBRARY_PATH)..."
 cat << 'CUDA_EOF' | sudo tee /etc/profile.d/cuda.sh > /dev/null
-export PATH=/usr/local/cuda-13.0/bin${PATH:+:${PATH}}
-export LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+export PATH=/usr/local/cuda-12.8/bin${PATH:+:${PATH}}
+export LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+export CUDA_HOME=/usr/local/cuda-12.8
 CUDA_EOF
 sudo chmod +x /etc/profile.d/cuda.sh
-echo "/usr/local/cuda-13.0/lib64" | sudo tee /etc/ld.so.conf.d/cuda.conf > /dev/null
+echo "/usr/local/cuda-12.8/lib64" | sudo tee /etc/ld.so.conf.d/cuda.conf > /dev/null
 sudo ldconfig
+
 # 현재 세션에도 즉시 적용
-export PATH=/usr/local/cuda-13.0/bin:${PATH}
-export LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64:${LD_LIBRARY_PATH:-}
+export PATH=/usr/local/cuda-12.8/bin:${PATH}
+export LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64:${LD_LIBRARY_PATH:-}
+export CUDA_HOME=/usr/local/cuda-12.8
 
 # Step 6: 부가 패키지
 echo "[Step 6] Installing auxiliary packages..."
@@ -117,8 +121,8 @@ sudo apt-get install -y \
     datacenter-gpu-manager-4-core \
     datacenter-gpu-manager-4-proprietary \
     datacenter-gpu-manager-4-multinode \
-    datacenter-gpu-manager-4-multinode-cuda13 || true
-sudo apt-get install -y nvidia-gds-13-0 || true
+    datacenter-gpu-manager-4-multinode-cuda12 || true
+sudo apt-get install -y nvidia-gds-12-8 || true
 
 # Step 7: 서비스 활성화
 echo "[Step 7] Enabling services..."
@@ -147,6 +151,6 @@ echo "--- Installed Driver Version ---"
 apt-cache policy nvidia-driver-580-open | head -5
 echo ""
 echo "=============================================="
-echo " Installation Complete!"
+echo " CUDA 12.8 GPU Stack Installation Complete!"
 echo " sudo reboot to apply driver changes."
 echo "=============================================="

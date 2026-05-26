@@ -33,13 +33,19 @@ if [ -z "${NODE_ROLE}" ]; then
     esac
 fi
 
+# [NEW] 역할 상태 저장을 위한 디렉토리 사전 생성 및 기록
+sudo mkdir -p ${MONITORING_DIR}
+echo "${NODE_ROLE}" | sudo tee ${MONITORING_DIR}/.role > /dev/null
+
+
 # 2. 필수 패키지 설치 (IPMI 도구 등)
 echo "[Step 2] Installing dependency packages..."
 sudo apt-get install -y freeipmi-tools ipmitool
 
 # 3. 디렉토리 및 설정 파일 준비
 echo "[Step 3] Preparing directories..."
-sudo mkdir -p ${MONITORING_DIR}/{prometheus-data,config}
+sudo mkdir -p ${MONITORING_DIR}/{prometheus-data,grafana-data,config}
+sudo chown -R ${USER}:${USER} ${MONITORING_DIR}
 
 # 파일 찾기 (여러 후보 경로 탐색)
 SEARCH_PATHS=("${SCRIPT_DIR}/monitoring" "${SCRIPT_DIR}" "${SCRIPT_DIR}/.." "${SCRIPT_DIR}/../monitoring")
@@ -84,6 +90,9 @@ sleep 5
 curl -sf http://localhost:9400/metrics | head -n 1 && echo "  [PASS] DCGM Exporter is running" || echo "  [FAIL] DCGM Exporter check failed"
 curl -sf http://localhost:9100/metrics | head -n 1 && echo "  [PASS] Node Exporter is running" || echo "  [FAIL] Node Exporter check failed"
 curl -sf http://localhost:9290/metrics | head -n 1 && echo "  [PASS] IPMI Exporter is running" || echo "  [FAIL] IPMI Exporter check failed"
+if [ "${NODE_ROLE}" == "node1" ]; then
+    curl -sf http://localhost:3000/api/health && echo "  [PASS] Grafana is running" || echo "  [FAIL] Grafana check failed"
+fi
 
 echo "=============================================="
 echo " Monitoring installation complete! (${NODE_ROLE})"

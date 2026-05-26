@@ -18,6 +18,9 @@ services:
     volumes:
       - /opt/monitoring/config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - /opt/monitoring/prometheus-data:/prometheus
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=Asia/Seoul
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -40,8 +43,10 @@ services:
       - "9400:9400"
     volumes:
       - /opt/monitoring/config/custom-dcgm-counters.csv:/etc/dcgm-exporter/customized.csv:ro
+      - /etc/localtime:/etc/localtime:ro
     environment:
       - DCGM_EXPORTER_COLLECTORS=/etc/dcgm-exporter/customized.csv
+      - TZ=Asia/Seoul
     deploy:
       resources:
         reservations:
@@ -67,6 +72,9 @@ services:
       - "9290:9290"
     volumes:
       - /opt/monitoring/config/ipmi-exporter-config.yml:/etc/ipmi-exporter/config.yml:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=Asia/Seoul
     command:
       - '--config.file=/etc/ipmi-exporter/config.yml'
       - '--freeipmi.path=/usr/sbin'
@@ -94,6 +102,9 @@ services:
       - /:/rootfs:ro
       - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
       - /run/udev:/run/udev:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=Asia/Seoul
     command:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'
@@ -109,6 +120,27 @@ services:
       # infiniband collector는 기본 활성화됨
     pid: host
     privileged: true
+    networks:
+      - monitoring
+
+  # ============================================================
+  # Grafana - 메트릭 시각화
+  # ============================================================
+  grafana:
+    image: grafana/grafana:11.5.0
+    pull_policy: never
+    container_name: grafana
+    user: "root"
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - /opt/monitoring/config/grafana-datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+      - /opt/monitoring/grafana-data:/var/lib/grafana
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=Asia/Seoul
+      - GF_SECURITY_ADMIN_PASSWORD=admin
     networks:
       - monitoring
 

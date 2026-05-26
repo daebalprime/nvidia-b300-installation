@@ -35,11 +35,15 @@ if ! command -v nvcc &>/dev/null; then
     echo "  [ERROR] nvcc not found. Please run 04_install_gpu_stack.sh first."
     exit 1
 fi
-# CUDA 경로 설정 (13.0 우선)
-if [ -d "/usr/local/cuda-13.0" ]; then
+# CUDA_HOME 설정 (기존 환경 변수 우선, 없으면 설치된 버전 자동 감지)
+if [ -n "${CUDA_HOME:-}" ] && [ -d "${CUDA_HOME}" ]; then
+    echo "  Using existing CUDA_HOME: ${CUDA_HOME}"
+elif [ -d "/usr/local/cuda-12.8" ]; then
+    export CUDA_HOME="/usr/local/cuda-12.8"
+elif [ -d "/usr/local/cuda-13.0" ]; then
     export CUDA_HOME="/usr/local/cuda-13.0"
 else
-    export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
+    export CUDA_HOME="/usr/local/cuda"
 fi
 export PATH="${CUDA_HOME}/bin:${PATH}"
 export LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH:-}"

@@ -37,10 +37,23 @@ fi
 NODE_ROLE="node2"
 EXISTING_IP=""
 
-# 현재 돌아가고 있는 도커 컨테이너 중 prometheus가 있으면 node1로 자동 판정
-if sudo docker ps --format '{{.Names}}' | grep -q 'prometheus'; then
+# 감지 우선순위 1: 영구 저장된 .role 상태 파일이 존재하는지 확인
+if [ -f "${MONITORING_DIR}/.role" ]; then
+    NODE_ROLE=$(cat "${MONITORING_DIR}/.role" | tr -d '[:space:]')
+    echo "  [INFO] Detected node role from state file: ${NODE_ROLE}"
+# 감지 우선순위 2: 호스트명(hostname) 패턴 매칭 검증
+elif hostname | grep -qiE "node2|poc-02|poc02|poc-2|poc2"; then
+    NODE_ROLE="node2"
+    echo "  [INFO] Hostname implies Node 2. Setting role: node2"
+elif hostname | grep -qiE "node1|poc-01|poc01|poc-1|poc1"; then
     NODE_ROLE="node1"
+    echo "  [INFO] Hostname implies Node 1. Setting role: node1"
+# 감지 우선순위 3: 레거시 컨테이너 감지
+elif sudo docker ps --format '{{.Names}}' | grep -q 'prometheus'; then
+    NODE_ROLE="node1"
+    echo "  [INFO] Prometheus container is active. Assumed role: node1"
 fi
+
 
 # 기존 prometheus.yml 설정에서 기적용된 Node 2 IP 주소 추출
 PROMETHEUS_TARGET="${MONITORING_DIR}/config/prometheus.yml"
@@ -55,7 +68,8 @@ fi
 
 # 3. 최신 설정 파일 동기화 복사
 echo "[Step 1] Syncing configuration files..."
-sudo mkdir -p "${MONITORING_DIR}/config"
+sudo mkdir -p "${MONITORING_DIR}/config" "${MONITORING_DIR}/grafana-data"
+sudo chown -R ${USER}:${USER} "${MONITORING_DIR}"
 
 # 일반 설정 파일 복사
 if [ -d "${FOUND_SRC}/config" ]; then

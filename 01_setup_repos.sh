@@ -11,6 +11,23 @@ DRIVER_DEB="nvidia-driver-local-repo-ubuntu2404-${DRIVER_VERSION}_1.0-1_amd64.de
 DRIVER_URL="https://developer.download.nvidia.com/compute/nvidia-driver/${DRIVER_VERSION}/local_installers/${DRIVER_DEB}"
 WORK_DIR="/tmp/nvidia-setup"
 
+# GPU 아키텍처 선택 (환경 변수 또는 대화형)
+GPU_ARCH="${GPU_ARCH:-}"
+if [ -z "${GPU_ARCH}" ]; then
+    echo "=============================================="
+    echo " Select GPU Architecture"
+    echo "=============================================="
+    echo "  1) Blackwell (B300 / B200)"
+    echo "  2) Hopper (H200 NVL / H100)"
+    read -p "  Choice (1 or 2): " ARCH_CHOICE
+    if [ "${ARCH_CHOICE}" = "1" ]; then
+        GPU_ARCH="Blackwell"
+    else
+        GPU_ARCH="Hopper"
+    fi
+fi
+echo "Using GPU Architecture: ${GPU_ARCH}"
+
 echo "=============================================="
 echo " Driver ${DRIVER_VERSION} Local Repo + Network Repos Setup"
 echo "=============================================="
@@ -74,6 +91,10 @@ Pin-Priority: 1001
 Package: nvidia-fabricmanager*
 Pin: version 580.126.20*
 Pin-Priority: 1001
+EOF
+
+if [ "${GPU_ARCH}" = "Blackwell" ]; then
+    cat <<'EOF' | sudo tee -a /etc/apt/preferences.d/nvidia-580-pin > /dev/null
 
 Package: nvidia-imex*
 Pin: version 580.126.20*
@@ -83,6 +104,7 @@ Package: nvlink5*
 Pin: version 580.126.20*
 Pin-Priority: 1001
 EOF
+fi
 
 ###############################################################################
 # Step 4: Container Toolkit 버전 고정 (1.19.0)

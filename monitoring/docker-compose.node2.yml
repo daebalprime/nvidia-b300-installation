@@ -17,8 +17,10 @@ services:
       - "9400:9400"
     volumes:
       - /opt/monitoring/config/custom-dcgm-counters.csv:/etc/dcgm-exporter/customized.csv:ro
+      - /etc/localtime:/etc/localtime:ro
     environment:
       - DCGM_EXPORTER_COLLECTORS=/etc/dcgm-exporter/customized.csv
+      - TZ=Asia/Seoul
     deploy:
       resources:
         reservations:
@@ -43,6 +45,9 @@ services:
       - "9290:9290"
     volumes:
       - /opt/monitoring/config/ipmi-exporter-config.yml:/etc/ipmi-exporter/config.yml:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=Asia/Seoul
     command:
       - '--config.file=/etc/ipmi-exporter/config.yml'
       - '--freeipmi.path=/usr/sbin'
@@ -69,6 +74,9 @@ services:
       - /:/rootfs:ro
       - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
       - /run/udev:/run/udev:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=Asia/Seoul
     command:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'

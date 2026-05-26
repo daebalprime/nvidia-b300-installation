@@ -18,10 +18,14 @@ nvidia-smi topo -m
 # 2. Fabric Manager & NVLink Status (Blackwell Optimized)
 echo ""
 echo "[2] Fabric Manager & NVLink Status"
-if systemctl is-active --quiet nvidia-fabricmanager; then
-    echo "  [PASS] Fabric Manager service is active"
+if systemctl list-unit-files | grep -q nvidia-fabricmanager; then
+    if systemctl is-active --quiet nvidia-fabricmanager; then
+        echo "  [PASS] Fabric Manager service is active"
+    else
+        echo "  [FAIL] Fabric Manager service is NOT active"
+    fi
 else
-    echo "  [FAIL] Fabric Manager service is NOT active"
+    echo "  [SKIP] Fabric Manager service is not installed on this system"
 fi
 
 # NVLink 연결 상태 상세 확인 (NVL18 등 확인)
@@ -35,13 +39,17 @@ else
     echo "  [PASS] All NVLinks are Active/Healthy"
 fi
 
-# 2.1 IMEX 서비스 확인 (Blackwell 필수)
+# 2.1 IMEX 서비스 확인
 echo ""
 echo "[2.1] NVIDIA IMEX Status"
-if systemctl is-active --quiet nvidia-imex; then
-    echo "  [PASS] IMEX service is active"
+if systemctl list-unit-files | grep -q nvidia-imex; then
+    if systemctl is-active --quiet nvidia-imex; then
+        echo "  [PASS] IMEX service is active"
+    else
+        echo "  [FAIL] IMEX service is NOT active"
+    fi
 else
-    echo "  [FAIL] IMEX service is NOT active (Required for Blackwell)"
+    echo "  [SKIP] IMEX service is not installed on this system"
 fi
 
 # 3. 네트워크 (OFED/RDMA) 확인

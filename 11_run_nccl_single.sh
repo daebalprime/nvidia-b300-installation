@@ -54,10 +54,14 @@ if [ "${NUM_GPUS}" -lt 2 ]; then
     exit 1
 fi
 
-# Fabric Manager 확인
-if ! systemctl is-active nvidia-fabricmanager &>/dev/null; then
-    echo "  [WARNING] Fabric Manager is not running!"
-    echo "         sudo systemctl enable --now nvidia-fabricmanager"
+# Fabric Manager 확인 (설치되어 있는 경우에만 검사)
+if systemctl list-unit-files | grep -q nvidia-fabricmanager; then
+    if ! systemctl is-active nvidia-fabricmanager &>/dev/null; then
+        echo "  [WARNING] Fabric Manager is not running!"
+        echo "         sudo systemctl enable --now nvidia-fabricmanager"
+    fi
+else
+    echo "  [NOTE] Fabric Manager is not installed. Skipping status check."
 fi
 
 # nvidia-peermem 확인
@@ -265,8 +269,9 @@ echo ""
 echo " Check GPU Topology:"
 echo "    nvidia-smi topo -m"
 echo ""
-echo " Expected NVSwitch B300 Performance:"
-echo "    BusBw Target: 750 - 850 GB/s (NV18 full mesh)"
+echo " Expected Performance Targets:"
+echo "    - Blackwell B300 (NV18 Full Mesh): BusBw Target 750 - 850 GB/s"
+echo "    - Hopper H200 NVL (2-Way NVLink4 Bridge): BusBw Target 130 - 140 GB/s"
 echo ""
 echo " Next: 12_run_nccl_multi.sh (Multi-node test)"
 echo ""
