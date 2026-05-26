@@ -35,6 +35,7 @@ services:
     image: nvcr.io/nvidia/k8s/dcgm-exporter:4.5.2-4.8.1-ubuntu22.04
     pull_policy: never
     container_name: dcgm-exporter
+    hostname: hgx-node1
     restart: unless-stopped
     ports:
       - "9400:9400"
@@ -63,6 +64,7 @@ services:
     image: prometheuscommunity/ipmi-exporter:latest
     pull_policy: never
     container_name: ipmi-exporter
+    hostname: hgx-node1
     user: "root"
     restart: unless-stopped
     ports:
@@ -89,6 +91,7 @@ services:
     image: prom/node-exporter:latest
     pull_policy: never
     container_name: node-exporter
+    hostname: hgx-node1
     user: "root"
     restart: unless-stopped
     ports:
@@ -124,7 +127,7 @@ services:
   # Grafana - 메트릭 시각화
   # ============================================================
   grafana:
-    image: grafana/grafana:11.5.2
+    image: grafana/grafana:7.5.17
     pull_policy: never
     container_name: grafana
     user: "root"

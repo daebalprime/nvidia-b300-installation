@@ -4,7 +4,7 @@
 #
 # 역할:
 #   1. 기존 실행 중인 모니터링 컨테이너 정지 및 리소스 정리
-#   2. DB 스키마 충돌 방지를 위해 기존 마운트 폴더(/opt/monitoring/grafana-data 및 prometheus-data) 삭제
+#   2. DB 스키마 충돌 방지를 위해 기존 마운트 폴더(/opt/monitoring/grafana-data) 삭제
 #   3. 신규 디렉토리 생성 및 올바른 권한(Prometheus 65534) 설정
 #   4. 로컬 소스 설정 파일 및 docker-compose.yml(Grafana v11.5.2) 복사
 #   5. 온라인 Docker Hub로부터 신규 Grafana v11.5.2 이미지 직접 Pull
@@ -13,7 +13,7 @@
 set -euo pipefail
 
 MONITORING_DIR="/opt/monitoring"
-TARGET_VERSION="11.5.2"
+TARGET_VERSION="7.5.17"
 
 echo "=========================================================="
 echo " Grafana Downgrade to v${TARGET_VERSION} & Data Purge (Online)"
@@ -46,32 +46,27 @@ echo "  [Complete] Container cleanup done"
 # Step 2: 마운트 볼륨 폴더 데이터 완전히 초기화 (삭제)
 # ============================================================================
 echo ""
-echo "[Step 2] Wiping mounted data folders to prevent DB version conflict..."
+echo "[Step 2] Wiping Grafana data folder to prevent DB version conflict..."
 
 if [ -d "${MONITORING_DIR}/grafana-data" ]; then
     echo "  → Removing Grafana DB/data: ${MONITORING_DIR}/grafana-data"
     rm -rf "${MONITORING_DIR}/grafana-data"
 fi
 
-if [ -d "${MONITORING_DIR}/prometheus-data" ]; then
-    echo "  → Removing Prometheus metrics: ${MONITORING_DIR}/prometheus-data"
-    rm -rf "${MONITORING_DIR}/prometheus-data"
-fi
-
-echo "  [Complete] Data volumes successfully wiped!"
+echo "  [Complete] Grafana data volume successfully wiped (Prometheus metrics preserved)!"
 
 # ============================================================================
 # Step 3: 새 디렉토리 생성 및 권한 설정
 # ============================================================================
 echo ""
-echo "[Step 3] Re-creating clean data directories..."
+echo "[Step 3] Preparing data directories..."
 mkdir -p "${MONITORING_DIR}"/{prometheus-data,grafana-data,config}
 
 # 소유자 복구 (Prometheus 데이터 권한: 65534, 그 외: 현재 호출한 원 사용자 소유)
 REAL_USER="${SUDO_USER:-$USER}"
 chown -R "${REAL_USER}:${REAL_USER}" "${MONITORING_DIR}"
 chown -R 65534:65534 "${MONITORING_DIR}/prometheus-data"
-echo "  [Complete] Directories re-created with clean permissions"
+echo "  [Complete] Grafana directory re-created, Prometheus metrics preserved!"
 
 # ============================================================================
 # Step 4: 최신 설정(v11.5.2) 동기화 복사

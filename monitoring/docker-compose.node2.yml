@@ -12,6 +12,7 @@ services:
     image: nvcr.io/nvidia/k8s/dcgm-exporter:4.5.2-4.8.1-ubuntu22.04
     pull_policy: never
     container_name: dcgm-exporter
+    hostname: hgx-node2
     restart: unless-stopped
     ports:
       - "9400:9400"
@@ -39,6 +40,7 @@ services:
     image: prometheuscommunity/ipmi-exporter:latest
     pull_policy: never
     container_name: ipmi-exporter
+    hostname: hgx-node2
     user: "root"
     restart: unless-stopped
     ports:
@@ -64,6 +66,7 @@ services:
     image: prom/node-exporter:latest
     pull_policy: never
     container_name: node-exporter
+    hostname: hgx-node2
     user: "root"
     restart: unless-stopped
     ports:
