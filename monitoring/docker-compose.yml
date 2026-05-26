@@ -129,10 +129,7 @@ services:
     container_name: grafana
     user: "root"
     restart: unless-stopped
-    ports:
-      - "3000:3000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    network_mode: host
     volumes:
       - /opt/monitoring/config/grafana-datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
       - /opt/monitoring/grafana-data:/var/lib/grafana
@@ -140,8 +137,6 @@ services:
     environment:
       - TZ=Asia/Seoul
       - GF_SECURITY_ADMIN_PASSWORD=admin
-    networks:
-      - monitoring
 
 networks:
   monitoring:
