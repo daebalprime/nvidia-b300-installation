@@ -13,7 +13,7 @@
 set -euo pipefail
 
 MONITORING_DIR="/opt/monitoring"
-TARGET_VERSION="7.5.17"
+TARGET_VERSION="10.4.1"
 
 echo "=========================================================="
 echo " Grafana Downgrade to v${TARGET_VERSION} & Data Purge (Online)"
