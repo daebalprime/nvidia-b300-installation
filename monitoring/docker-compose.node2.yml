@@ -86,8 +86,8 @@ services:
       - '--path.rootfs=/rootfs'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
       # === 추가 활성화 collector ===
-      - '--collector.systemd'            # systemd 서비스 상태
-      - '--collector.interrupts'         # 인터럽트 카운터
+      # - '--collector.systemd'            # systemd 서비스 상태 (성능 저하 및 Scrape Timeout 방지 위해 비활성화)
+      # - '--collector.interrupts'         # 인터럽트 카운터 (고코어 EPYC/Xeon 환경에서 오버헤드 방지 위해 비활성화)
       - '--collector.tcpstat'            # TCP 연결 상태
       - '--collector.buddyinfo'          # 메모리 조각화
       - '--collector.meminfo_numa'       # NUMA 노드별 메모리

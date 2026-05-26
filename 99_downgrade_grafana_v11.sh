@@ -13,10 +13,10 @@
 set -euo pipefail
 
 MONITORING_DIR="/opt/monitoring"
-TARGET_VERSION="10.4.1"
+TARGET_VERSION="latest"
 
 echo "=========================================================="
-echo " Grafana Downgrade to v${TARGET_VERSION} & Data Purge (Online)"
+echo " Grafana Reset to ${TARGET_VERSION} & Data Purge (Online)"
 echo "=========================================================="
 
 # 0. 루트 권한 확인
@@ -140,9 +140,9 @@ docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}" | grep -E "grafan
 
 echo ""
 echo "=========================================================="
-echo " Downgrade & Purge Task Complete!"
+echo " Reset & Purge Task Complete!"
 echo "=========================================================="
-echo " - Grafana version downgraded to v${TARGET_VERSION} (Online)"
+echo " - Grafana version reset to ${TARGET_VERSION} (Online)"
 echo " - All old mount databases have been wiped and started fresh."
 echo " - Grafana URL: http://$(hostname -I | awk '{print $1}'):3000"
 echo "=========================================================="
